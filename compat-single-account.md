@@ -108,7 +108,7 @@ openclaw channels status
 
 ## A.4 Webhook 路径
 
-- Bot: `/wecom/bot`
+- Bot: `/wecom`（默认）或 `/wecom/bot`
 - Agent: `/wecom/agent`
 
 ## A.5 迁移建议

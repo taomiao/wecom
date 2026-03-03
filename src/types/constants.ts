@@ -10,9 +10,9 @@ export const WEBHOOK_PATHS = {
     BOT_ALT: "/wecom/bot",
     /** Agent 模式历史兼容路径（不再维护） */
     AGENT: "/wecom/agent",
-    /** Bot 模式（唯一支持路径前缀） */
+    /** Bot 模式推荐路径前缀 */
     BOT_PLUGIN: "/plugins/wecom/bot",
-    /** Agent 模式（唯一支持路径前缀） */
+    /** Agent 模式推荐路径前缀 */
     AGENT_PLUGIN: "/plugins/wecom/agent",
 } as const;
 

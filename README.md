@@ -502,6 +502,8 @@ Agent 输出 `{"template_card": ...}` 时自动渲染为交互卡片：
 
 ### 2026.3.3（今日更新简报）
 
+- 【SDK适配】♻️ **插件 HTTP 注册升级**：入口改为 `registerHttpRoute`（`/plugins/wecom` + `match=prefix` + `auth=plugin`），适配 OpenClaw 新版插件接口。
+- 【兼容修复】🔁 **旧入口保持可达**：同步注册 `/wecom` 前缀路由，保障历史 Bot/Agent 回调地址继续可用。
 - 【兼容性修复】🧩 **OpenClaw 3.1 路由抢占问题修复**：推荐回调地址升级为 `/plugins/wecom/bot/{accountId}`、`/plugins/wecom/agent/{accountId}`，规避根路径 Control UI fallback 抢占 webhook。
 - 【引导收敛】🧭 **Onboarding 仅支持账号化配置**：配置向导统一写入 `channels.wecom.accounts.<accountId>`，不再引导单账号旧结构。
 - 【兼容策略】🔁 **旧路径兼容保留**：`/wecom/*` 历史回调路径保留兼容能力，但不再作为维护主路径。

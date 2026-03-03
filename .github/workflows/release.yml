@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'wecom-v*'
 
 jobs:
   publish:
@@ -34,6 +35,51 @@ jobs:
         run: |
           npm i -g npm@^11.5.1
           npm -v
+          npm config delete always-auth || true
+
+      - name: Resolve release metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "${TAG}" == wecom-v* ]]; then
+            VERSION="${TAG#wecom-v}"
+          elif [[ "${TAG}" == v* ]]; then
+            VERSION="${TAG#v}"
+          else
+            echo "::error::Unsupported tag format: ${TAG}. Use v<version> or wecom-v<version>."
+            exit 1
+          fi
+          PKG_NAME="$(node -p "require('./package.json').name")"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "pkg_name=${PKG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "pkg_version=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
+
+          echo "tag=${TAG}"
+          echo "version_from_tag=${VERSION}"
+          echo "package=${PKG_NAME}@${PKG_VERSION}"
+
+          if [ "${VERSION}" != "${PKG_VERSION}" ]; then
+            echo "::error::Tag version (${VERSION}) does not match package.json version (${PKG_VERSION})."
+            exit 1
+          fi
+
+      - name: Check npm version already published
+        id: npm_check
+        run: |
+          set -euo pipefail
+          PKG="${{ steps.meta.outputs.pkg_name }}"
+          VER="${{ steps.meta.outputs.pkg_version }}"
+          if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "npm version already published: ${PKG}@${VER}"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "npm version not published yet: ${PKG}@${VER}"
+          fi
 
       - name: Install Dependencies
         run: npm install --legacy-peer-deps || npm install
@@ -43,13 +89,35 @@ jobs:
 
       # 🚀 自动发布到 npm (使用 OIDC 自动授权，无需 Token)
       - name: Publish to npm
+        if: steps.npm_check.outputs.exists != 'true'
         run: npm publish --access public
+
+      - name: Prepare release notes body
+        id: notes
+        run: |
+          set -euo pipefail
+          CHANGELOG_FILE="changelog/v${{ steps.meta.outputs.version }}.md"
+          if [ -f "${CHANGELOG_FILE}" ]; then
+            echo "Using changelog file: ${CHANGELOG_FILE}"
+            cp "${CHANGELOG_FILE}" /tmp/release-body.md
+          else
+            echo "Changelog file missing: ${CHANGELOG_FILE}; using fallback notes."
+            {
+              echo "# @yanhaidao/wecom v${{ steps.meta.outputs.version }}"
+              echo
+              if [ "${{ steps.npm_check.outputs.exists }}" = "true" ]; then
+                echo "- npm publish skipped: version already exists."
+              else
+                echo "- npm publish completed."
+              fi
+            } > /tmp/release-body.md
+          fi
 
       # 自动同步发布 GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          body_path: changelog/${{ github.ref_name }}.md
+          body_path: /tmp/release-body.md
           draft: false
           prerelease: false
         env:
