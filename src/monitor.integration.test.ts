@@ -198,6 +198,8 @@ describe("Monitor Integration: Inbound Image", () => {
         // Expect Context Injection
         expect(ctx.MediaPath).toBe("/tmp/saved-image.jpg");
         expect(ctx.MediaType).toBe("image/jpeg");
+        expect(ctx.Surface).toBe("wecom");
+        expect(ctx.OriginatingChannel).toBe("wecom");
 
         expect(undiciFetch).toHaveBeenCalledWith(
             imageUrl,

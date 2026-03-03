@@ -1549,7 +1549,11 @@ async function startAgentForStream(params: {
     SenderName: userid,
     SenderId: userid,
     Provider: "wecom",
-    Surface: "webchat",
+    // Keep Surface aligned with OriginatingChannel for Bot-mode delivery.
+    // If Surface is "webchat", core dispatch treats this as cross-channel
+    // and routes replies via routeReply -> wecom outbound (Agent API),
+    // bypassing the Bot stream deliver path.
+    Surface: "wecom",
     MessageSid: msg.msgid,
     CommandAuthorized: commandAuthorized,
     OriginatingChannel: "wecom",
