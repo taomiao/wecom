@@ -1,6 +1,6 @@
 {
   "name": "@yanhaidao/wecom",
-  "version": "2.3.11-zh",
+  "version": "2.3.12-zh",
   "type": "module",
   "description": "OpenClaw 企业微信（WeCom）插件，默认 Bot WebSocket，支持 Agent 主动发消息与多账号接入",
   "repository": {
@@ -50,6 +50,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.2.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.8"
   }
 }

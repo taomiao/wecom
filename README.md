@@ -449,6 +449,82 @@ openclaw channels status --deep
 
 近期保持高频迭代，最近版本如下：
 
+#### v2.3.12-zh（2026-03-13）by proyy
+
+> 本版本 WeCom Doc 功能增强来自 [proyy/wecom](https://github.com/proyy/wecom)。
+
+**WeCom Doc 功能模块详细核验报告：**
+
+### 📊 功能实现状态总览
+
+| 功能模块 | 状态 | 说明 |
+| :--- | :--- | :--- |
+| **管理文档** | ✅ 已实现 | 新建/删除/重命名/信息获取/分享均已就绪 |
+| **管理文档内容** | ✅ 已实现 | 文档内容读写、表格行列操作均已支持 |
+| **智能表格** | ✅ 已实现 | 子表/视图/字段/记录/编组的全生命周期管理 |
+| **设置文档权限** | ✅ 已实现 | 成员权限、安全设置、查看规则均已覆盖 |
+| **管理收集表** | ✅ 已实现 | 创建/编辑/统计/答案读取均已实现 |
+| **高级账号管理** | ✅ 已实现 | 分配/取消/列表查询均已实现 |
+| **素材管理** | ✅ 已实现 | 支持上传图片到文档专用素材库 |
+| **回调通知** | ❌ **未实现** | **当前系统会丢弃文档相关回调事件** |
+| **接收外部数据** | ✅ 已实现 | 已支持向智能表格添加/更新外部记录 |
+
+### 📝 逐项详细确认
+
+#### 1. 管理文档
+*   **新建文档**: `createDoc` (支持文档、表格、智能表格)
+*   **重命名文档**: `renameDoc`
+*   **删除文档**: `deleteDoc`
+*   **获取文档基础信息**: `getDocBaseInfo`
+*   **分享文档**: `shareDoc`
+
+#### 2. 管理文档内容
+*   **编辑文档内容**: `updateDocContent`
+*   **获取文档数据**: `getDocContent`
+*   **管理表格内容**: `modifySheetProperties`
+*   **编辑表格内容**: `editSheetData`
+*   **获取表格行列信息**: `getSheetProperties`
+*   **获取表格数据**: `getSheetData`
+
+#### 3. 管理智能表格内容
+*   **添加/删除/更新/查询子表**: `smartTableAddSheet`, `smartTableDeleteSheet` 等
+*   **添加/删除/更新/查询视图**: `smartTableAddView`, `smartTableView` 等
+*   **添加/删除/更新/查询字段**: `smartTableAddField`, `smartTableUpdateField` 等
+*   **添加/删除/更新/查询记录**: `smartTableAddRecords`, `smartTableGetRecords` 等
+*   **添加/删除/更新/获取编组**: 已通过 `smartTableUpdateGrouping` 等接口实现
+
+#### 4. 设置文档权限
+*   **获取文档权限信息**: `getDocAuth`
+*   **修改文档查看规则**: `setDocJoinRule`
+*   **修改文档通知范围及权限**: `modDocMemberNotifiedScope`, `setDocMemberAuth`
+*   **修改文档安全设置**: `setDocSafetySetting`, `modDocSecuritySetting`
+*   **管理智能表格内容权限**: 已包含在上述权限接口中 (支持对子表粒度控制)
+
+#### 5. 管理收集表
+*   **创建/编辑收集表**: `createCollect`, `modifyCollect`
+*   **获取收集表信息**: `getFormInfo`
+*   **收集表的统计信息查询**: `getFormStatistic`
+*   **读取收集表答案**: `getFormAnswer`
+
+#### 6. 回调通知 (⚠️ 缺失)
+*   修改文档成员事件
+*   删除文档事件
+*   收集表完成事件
+*   删除收集表事件
+*   修改收集表设置事件
+*   字段变更事件
+*   记录变更事件
+
+**原因诊断**: 在 `src/agent/handler.ts` 的 `shouldProcessAgentInboundMessage` 函数中，系统目前**显式过滤**了除 `subscribe`, `enter_agent`, `batch_job_result` 之外的所有事件。文档变更事件（如 `update_doc`, `doc_create` 等）会被视为 `unknown event` 而直接丢弃。
+
+#### 7. 接收外部数据到智能表格
+*   **概述/添加记录**: `smartTableAddExternalRecords`
+*   **更新记录**: `smartTableUpdateExternalRecords`
+
+#### 8. 高级功能账号管理 & 素材管理
+*   **账号管理**: `assignDocAdvancedAccount`, `cancelDocAdvancedAccount`, `getDocAdvancedAccountList`
+*   **上传文档图片**: `uploadDocImage`
+
 #### v2.3.11-zh（2026-03-12）by proyy
 
 - 全面增加企业微信 WeCom Doc 工具链：文档/表格/智能表格/收集表，以及全面的 CRUD 支持。
