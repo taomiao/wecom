@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import FormData from "form-data";
 import type { ResolvedAgentAccount } from "../../types/index.js";
 import { getAccessToken } from "../../transport/agent-api/core.js";
 import { wecomFetch } from "../../http.js";
@@ -9,19 +11,19 @@ function readString(value: unknown): string {
     return trimmed || "";
 }
 
-function normalizeDocType(docType: unknown): 3 | 4 | 5 {
+function normalizeDocType(docType: unknown): 3 | 4 | 10 {
     if (docType === 3 || docType === "3") return 3;
     if (docType === 4 || docType === "4") return 4;
-    if (docType === 5 || docType === "5") return 5;
+    if (docType === 10 || docType === "10" || docType === 5 || docType === "5") return 10;
     const normalized = readString(docType).toLowerCase();
     if (!normalized || normalized === "doc") return 3;
     if (normalized === "spreadsheet" || normalized === "sheet" || normalized === "table") return 4;
-    if (normalized === "smart_table" || normalized === "smarttable") return 5;
+    if (normalized === "smart_table" || normalized === "smarttable") return 10;
     throw new Error(`Unsupported WeCom docType: ${String(docType)}`);
 }
 
-function mapDocTypeLabel(docType: 3 | 4 | 5): string {
-    if (docType === 5) return "smart_table";
+function mapDocTypeLabel(docType: 3 | 4 | 10): string {
+    if (docType === 10) return "smart_table";
     if (docType === 4) return "spreadsheet";
     return "doc";
 }
@@ -93,9 +95,9 @@ function buildDocMemberAuthRequest(params: {
     const normalizedRemovedViewers = normalizeDocMemberEntryList(removeViewers);
     const normalizedRemovedCollaborators = normalizeDocMemberEntryList(removeCollaborators);
 
-    if (normalizedViewers.length > 0) payload.update_doc_member_list = normalizedViewers;
+    if (normalizedViewers.length > 0) payload.update_file_member_list = normalizedViewers;
     if (normalizedCollaborators.length > 0) payload.update_co_auth_list = normalizedCollaborators;
-    if (normalizedRemovedViewers.length > 0) payload.del_doc_member_list = normalizedRemovedViewers;
+    if (normalizedRemovedViewers.length > 0) payload.del_file_member_list = normalizedRemovedViewers;
     if (normalizedRemovedCollaborators.length > 0) payload.del_co_auth_list = normalizedRemovedCollaborators;
 
     if (
@@ -243,8 +245,8 @@ export class WecomDocClient {
         if (fatherId) payload.fatherid = readString(fatherId);
 
         const json = await this.postWecomDocApi({
-            path: "/cgi-bin/wedoc/copy_doc",
-            actionLabel: "copy_doc",
+            path: "/cgi-bin/wedoc/smartsheet/copy",
+            actionLabel: "copy_smartsheet",
             agent,
             body: payload,
         });
@@ -392,9 +394,9 @@ export class WecomDocClient {
         });
         return {
             ...result,
-            addedViewerCount: (payload.update_doc_member_list as any[])?.length ?? 0,
+            addedViewerCount: (payload.update_file_member_list as any[])?.length ?? 0,
             addedCollaboratorCount: (payload.update_co_auth_list as any[])?.length ?? 0,
-            removedViewerCount: (payload.del_doc_member_list as any[])?.length ?? 0,
+            removedViewerCount: (payload.del_file_member_list as any[])?.length ?? 0,
             removedCollaboratorCount: (payload.del_co_auth_list as any[])?.length ?? 0,
         };
     }
@@ -597,6 +599,39 @@ export class WecomDocClient {
         };
     }
 
+    async getDocSecuritySetting(params: { agent: ResolvedAgentAccount; docId: string }) {
+        const { agent, docId } = params;
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/get_doc_security_setting",
+            actionLabel: "get_doc_security_setting",
+            agent,
+            body: { docid: readString(docId) },
+        });
+        return json;
+    }
+
+    async modDocSecuritySetting(params: { agent: ResolvedAgentAccount; docId: string; setting: any }) {
+        const { agent, docId, setting } = params;
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/mod_doc_security_setting",
+            actionLabel: "mod_doc_security_setting",
+            agent,
+            body: { docid: readString(docId), ...setting },
+        });
+        return json;
+    }
+
+    async modDocMemberNotifiedScope(params: { agent: ResolvedAgentAccount; docId: string; notified_scope_type: number; notified_member_list?: any[] }) {
+        const { agent, docId, notified_scope_type, notified_member_list } = params;
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/mod_doc_member_notified_scope",
+            actionLabel: "mod_doc_member_notified_scope",
+            agent,
+            body: { docid: readString(docId), notified_scope_type, notified_member_list },
+        });
+        return json;
+    }
+
     async editSheetData(params: { agent: ResolvedAgentAccount; docId: string; request: any }) {
         const { agent, docId, request } = params;
         const body = { docid: readString(docId), ...readObject(request) };
@@ -641,5 +676,229 @@ export class WecomDocClient {
             agent, body,
         });
         return { raw: json, docId };
+    }
+
+    async smartTableGetSheets(params: { agent: ResolvedAgentAccount; docId: string }) {
+        const { agent, docId } = params;
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/get_sheet",
+            actionLabel: "smartsheet_get_sheet",
+            agent,
+            body: { docid: readString(docId) },
+        });
+        return {
+            raw: json,
+            sheets: readArray(json.sheet_list),
+        };
+    }
+
+    async smartTableAddSheet(params: { agent: ResolvedAgentAccount; docId: string; title: string; index?: number }) {
+        const { agent, docId, title, index } = params;
+        return this.smartTableOperate({ agent, docId, operation: "add_sheet", bodyData: { properties: { title, index } } });
+    }
+
+    async smartTableDelSheet(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string }) {
+        const { agent, docId, sheetId } = params;
+        return this.smartTableOperate({ agent, docId, operation: "delete_sheet", bodyData: { sheet_id: sheetId } });
+    }
+
+    async smartTableUpdateSheet(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; title: string }) {
+        const { agent, docId, sheetId, title } = params;
+        return this.smartTableOperate({ agent, docId, operation: "update_sheet", bodyData: { properties: { sheet_id: sheetId, title } } });
+    }
+    async smartTableAddView(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; view_title: string; view_type: string; property_gantt?: any; property_calendar?: any }) {
+        const { agent, docId, sheetId, view_title, view_type, property_gantt, property_calendar } = params;
+        return this.smartTableOperate({ agent, docId, operation: "add_view", bodyData: { sheet_id: sheetId, view_title, view_type, property_gantt, property_calendar } });
+    }
+
+    async smartTableUpdateView(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; view_id: string; view_title?: string; property_gantt?: any; property_calendar?: any }) {
+        const { agent, docId, sheetId, view_id, view_title, property_gantt, property_calendar } = params;
+        return this.smartTableOperate({ agent, docId, operation: "update_view", bodyData: { sheet_id: sheetId, view_id, view_title, property_gantt, property_calendar } });
+    }
+
+    async smartTableDelView(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; view_ids: string[] }) {
+        const { agent, docId, sheetId, view_ids } = params;
+        return this.smartTableOperate({ agent, docId, operation: "delete_views", bodyData: { sheet_id: sheetId, view_ids } });
+    }
+
+    async smartTableAddFields(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; fields: any[] }) {
+        const { agent, docId, sheetId, fields } = params;
+        return this.smartTableOperate({ agent, docId, operation: "add_fields", bodyData: { sheet_id: sheetId, fields } });
+    }
+
+    async smartTableDelFields(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; field_ids: string[] }) {
+        const { agent, docId, sheetId, field_ids } = params;
+        return this.smartTableOperate({ agent, docId, operation: "delete_fields", bodyData: { sheet_id: sheetId, field_ids } });
+    }
+
+    async smartTableUpdateFields(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; fields: any[] }) {
+        const { agent, docId, sheetId, fields } = params;
+        return this.smartTableOperate({ agent, docId, operation: "update_fields", bodyData: { sheet_id: sheetId, fields } });
+    }
+
+    async smartTableAddGroup(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; name: string; children?: string[] }) {
+        const { agent, docId, sheetId, name, children } = params;
+        return this.smartTableOperate({ agent, docId, operation: "add_field_group", bodyData: { sheet_id: sheetId, name, children } });
+    }
+
+    async smartTableDelGroup(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; field_group_id: string }) {
+        const { agent, docId, sheetId, field_group_id } = params;
+        return this.smartTableOperate({ agent, docId, operation: "delete_field_group", bodyData: { sheet_id: sheetId, field_group_id } });
+    }
+
+    async smartTableUpdateGroup(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; field_group_id: string; name?: string; children?: string[] }) {
+        const { agent, docId, sheetId, field_group_id, name, children } = params;
+        return this.smartTableOperate({ agent, docId, operation: "update_field_group", bodyData: { sheet_id: sheetId, field_group_id, name, children } });
+    }
+
+    async smartTableGetGroups(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string }) {
+        const { agent, docId, sheetId } = params;
+        return this.smartTableOperate({ agent, docId, operation: "get_field_groups", bodyData: { sheet_id: sheetId } });
+    }
+
+    async smartTableAddExternalRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; records: any[] }) {
+        const { agent, docId, sheetId, records } = params;
+        return this.smartTableOperate({ agent, docId, operation: "add_external_records", bodyData: { sheet_id: sheetId, records } });
+    }
+
+    async smartTableUpdateExternalRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; records: any[] }) {
+        const { agent, docId, sheetId, records } = params;
+        return this.smartTableOperate({ agent, docId, operation: "update_external_records", bodyData: { sheet_id: sheetId, records } });
+    }
+
+    async smartTableAddRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; records: any[] }) {
+        const { agent, docId, sheetId, records } = params;
+        return this.smartTableOperate({ agent, docId, operation: "add_records", bodyData: { sheet_id: sheetId, records } });
+    }
+
+    async smartTableUpdateRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; records: any[] }) {
+        const { agent, docId, sheetId, records } = params;
+        return this.smartTableOperate({ agent, docId, operation: "update_records", bodyData: { sheet_id: sheetId, records } });
+    }
+
+    async smartTableDelRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; record_ids: string[] }) {
+        const { agent, docId, sheetId, record_ids } = params;
+        return this.smartTableOperate({ agent, docId, operation: "delete_records", bodyData: { sheet_id: sheetId, record_ids } });
+    }
+
+    async smartTableGetRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; record_ids?: string[]; offset?: number; limit?: number }) {
+        const { agent, docId, sheetId, record_ids, offset, limit } = params;
+        return this.smartTableOperate({ agent, docId, operation: "get_records", bodyData: { sheet_id: sheetId, record_ids, offset, limit } });
+    }
+
+    // --- Smartsheet Content Permissions ---
+
+    async smartTableGetSheetPriv(params: { agent: ResolvedAgentAccount; docId: string; type: number; rule_id_list?: number[] }) {
+        const { agent, docId, type, rule_id_list } = params;
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/content_priv/get_sheet_priv",
+            actionLabel: "smartsheet_get_sheet_priv",
+            agent,
+            body: { docid: readString(docId), type, rule_id_list },
+        });
+        return { raw: json };
+    }
+
+    async smartTableModSheetPriv(params: { agent: ResolvedAgentAccount; docId: string; rule_list: any[] }) {
+        const { agent, docId, rule_list } = params;
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/content_priv/mod_sheet_priv",
+            actionLabel: "smartsheet_mod_sheet_priv",
+            agent,
+            body: { docid: readString(docId), rule_list },
+        });
+        return { raw: json };
+    }
+
+    async smartTableAddMemberPriv(params: { agent: ResolvedAgentAccount; docId: string; member_priv_list: any[] }) {
+        const { agent, docId, member_priv_list } = params;
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/content_priv/add_member_priv",
+            actionLabel: "smartsheet_add_member_priv",
+            agent,
+            body: { docid: readString(docId), member_priv_list },
+        });
+        return { raw: json };
+    }
+
+    async smartTableModMemberPriv(params: { agent: ResolvedAgentAccount; docId: string; member_priv_list: any[] }) {
+        const { agent, docId, member_priv_list } = params;
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/content_priv/mod_member_priv",
+            actionLabel: "smartsheet_mod_member_priv",
+            agent,
+            body: { docid: readString(docId), member_priv_list },
+        });
+        return { raw: json };
+    }
+
+    async smartTableDelMemberPriv(params: { agent: ResolvedAgentAccount; docId: string; rule_id_list: number[] }) {
+        const { agent, docId, rule_id_list } = params;
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/content_priv/del_member_priv",
+            actionLabel: "smartsheet_del_member_priv",
+            agent,
+            body: { docid: readString(docId), rule_id_list },
+        });
+        return { raw: json };
+    }
+
+    // --- Advanced Account Management ---
+
+    async assignDocAdvancedAccount(params: { agent: ResolvedAgentAccount; userid_list: string[] }) {
+        const { agent, userid_list } = params;
+        return this.postWecomDocApi({
+            path: "/cgi-bin/meeting/vip/submit_batch_add_job",
+            actionLabel: "assign_advanced_account",
+            agent,
+            body: { userid_list },
+        });
+    }
+
+    async cancelDocAdvancedAccount(params: { agent: ResolvedAgentAccount; userid_list: string[] }) {
+        const { agent, userid_list } = params;
+        return this.postWecomDocApi({
+            path: "/cgi-bin/meeting/vip/submit_batch_del_job",
+            actionLabel: "cancel_advanced_account",
+            agent,
+            body: { userid_list },
+        });
+    }
+
+    async getDocAdvancedAccountList(params: { agent: ResolvedAgentAccount; offset?: number; limit?: number }) {
+        const { agent, offset, limit } = params;
+        return this.postWecomDocApi({
+            path: "/cgi-bin/meeting/vip/get_vip_user_list",
+            actionLabel: "get_advanced_account_list",
+            agent,
+            body: { cursor: offset ? String(offset) : undefined, limit: limit ?? 100 },
+        });
+    }
+
+    // --- Material Management ---
+
+    async uploadDocImage(params: { agent: ResolvedAgentAccount; file_path: string }) {
+        const { agent, file_path } = params;
+        const accessToken = await getAccessToken(agent);
+        const proxyUrl = resolveWecomEgressProxyUrlFromNetwork();
+        
+        const form = new FormData();
+        form.append("media", fs.createReadStream(file_path));
+
+        const res = await wecomFetch(
+            `https://qyapi.weixin.qq.com/cgi-bin/media/uploadimg?access_token=${accessToken}`,
+            {
+                method: "POST",
+                body: form as any,
+                headers: form.getHeaders(),
+            },
+            { proxyUrl }
+        );
+
+        const json = await res.json() as any;
+        if (json.errcode) {
+            throw new Error(`WeCom API Error: ${json.errmsg} (${json.errcode})`);
+        }
+        return json;
     }
 }

@@ -10,7 +10,7 @@ function readString(value: unknown): string {
 }
 
 function mapDocTypeLabel(docType: number): string {
-    if (docType === 5) return "智能表格";
+    if (docType === 10) return "智能表格";
     return docType === 4 ? "表格" : "文档";
 }
 
@@ -277,6 +277,12 @@ function summarizeFormStatistic(result: any = {}) {
     return `收集表统计已获取：请求 ${result.items?.length ?? 0}，成功 ${result.successCount ?? 0}`;
 }
 
+function summarizeAdvancedAccount(result: any = {}, action: string) {
+    if (action === "assign") return `高级功能账号分配任务已提交，jobid: ${result.jobid || "未知"}`;
+    if (action === "cancel") return `高级功能账号取消任务已提交，jobid: ${result.jobid || "未知"}`;
+    return `高级功能账号列表已获取：${result.userList?.length ?? 0} 个`;
+}
+
 function readMemberUserId(value: any) {
     if (typeof value === "string" || typeof value === "number") {
         return readString(value);
@@ -434,7 +440,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                             docId: params.docId,
                             title: readString(result.info?.doc_name) || undefined,
                             resourceType:
-                                Number(result.info?.doc_type) === 5 ? "smart_table" : Number(result.info?.doc_type) === 4 ? "spreadsheet" : "doc",
+                                Number(result.info?.doc_type) === 10 ? "smart_table" : Number(result.info?.doc_type) === 4 ? "spreadsheet" : "doc",
                             summary: summarizeDocInfo(result.info),
                             raw: result.raw,
                         });
@@ -772,48 +778,175 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                             raw: result.raw,
                         });
                     }
-                    case "smart_table_operate":
-                    case "smartsheet_add_records":
-                    case "smartsheet_update_records":
-                    case "smartsheet_del_records":
-                    case "smartsheet_get_records":
-                    case "smartsheet_add_fields":
-                    case "smartsheet_update_fields":
-                    case "smartsheet_del_fields":
-                    case "smartsheet_get_fields":
-                    case "smartsheet_add_view":
-                    case "smartsheet_update_view":
-                    case "smartsheet_del_view":
-                    case "smartsheet_get_views": {
-                        const operationMap: Record<string, string> = {
-                            "smartsheet_add_records": "add_records",
-                            "smartsheet_update_records": "update_records",
-                            "smartsheet_del_records": "del_records",
-                            "smartsheet_get_records": "get_records",
-                            "smartsheet_add_fields": "add_fields",
-                            "smartsheet_update_fields": "update_fields",
-                            "smartsheet_del_fields": "del_fields",
-                            "smartsheet_get_fields": "get_fields",
-                            "smartsheet_add_view": "add_view",
-                            "smartsheet_update_view": "update_view",
-                            "smartsheet_del_view": "del_view",
-                            "smartsheet_get_views": "get_views",
-                        };
-                        const operation = params.operation || operationMap[action as string] || (action as string).replace("smartsheet_", "");
+                    case "smartsheet_add_records": {
                         const result = await docClient.smartTableOperate({
                             agent: account,
                             docId: params.docId,
-                            operation,
-                            bodyData: params.bodyData || params,
+                            operation: "add_records",
+                            bodyData: params,
+                        });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格记录已添加", raw: result.raw });
+                    }
+                    case "smartsheet_update_records": {
+                        const result = await docClient.smartTableOperate({
+                            agent: account,
+                            docId: params.docId,
+                            operation: "update_records",
+                            bodyData: params,
+                        });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格记录已更新", raw: result.raw });
+                    }
+                    case "smartsheet_del_records": {
+                        const result = await docClient.smartTableOperate({
+                            agent: account,
+                            docId: params.docId,
+                            operation: "del_records",
+                            bodyData: params,
+                        });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格记录已删除", raw: result.raw });
+                    }
+                    case "smartsheet_get_records": {
+                        const result = await docClient.smartTableOperate({
+                            agent: account,
+                            docId: params.docId,
+                            operation: "get_records",
+                            bodyData: params,
+                        });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格记录已获取", raw: result.raw });
+                    }
+                    case "smartsheet_add_sheet": {
+                        const result = await docClient.smartTableAddSheet({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格子表已添加", raw: result.raw });
+                    }
+                    case "smartsheet_del_sheet": {
+                        const result = await docClient.smartTableDelSheet({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格子表已删除", raw: result.raw });
+                    }
+                    case "smartsheet_update_sheet": {
+                        const result = await docClient.smartTableUpdateSheet({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格子表已更新", raw: result.raw });
+                    }
+                    case "smartsheet_add_view": {
+                        const result = await docClient.smartTableAddView({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格视图已添加", raw: result.raw });
+                    }
+                    case "smartsheet_del_view": {
+                        const result = await docClient.smartTableDelView({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格视图已删除", raw: result.raw });
+                    }
+                    case "smartsheet_get_views": {
+                        const result = await docClient.smartTableOperate({ agent: account, docId: params.docId, operation: "get_views", bodyData: { sheet_id: params.sheetId } });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格视图列表已获取", raw: result.raw });
+                    }
+                    case "smartsheet_add_fields": {
+                        const result = await docClient.smartTableAddFields({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格字段已添加", raw: result.raw });
+                    }
+                    case "smartsheet_del_fields": {
+                        const result = await docClient.smartTableDelFields({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格字段已删除", raw: result.raw });
+                    }
+                    case "smartsheet_update_fields": {
+                        const result = await docClient.smartTableUpdateFields({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格字段已更新", raw: result.raw });
+                    }
+                    case "smartsheet_update_view": {
+                        const result = await docClient.smartTableUpdateView({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格视图已更新", raw: result.raw });
+                    }
+                    case "smartsheet_get_fields": {
+                        const result = await docClient.smartTableOperate({ agent: account, docId: params.docId, operation: "get_fields", bodyData: { sheet_id: params.sheetId, view_id: params.view_id } });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格字段列表已获取", raw: result.raw });
+                    }
+                    case "smartsheet_add_group": {
+                        const result = await docClient.smartTableAddGroup({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格编组已添加", raw: result.raw });
+                    }
+                    case "smartsheet_del_group": {
+                        const result = await docClient.smartTableDelGroup({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格编组已删除", raw: result.raw });
+                    }
+                    case "smartsheet_update_group": {
+                        const result = await docClient.smartTableUpdateGroup({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格编组已更新", raw: result.raw });
+                    }
+                    case "smartsheet_get_groups": {
+                        const result = await docClient.smartTableGetGroups({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格编组列表已获取", raw: result.raw });
+                    }
+                    case "smartsheet_add_external_records": {
+                        const result = await docClient.smartTableAddExternalRecords({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格外部记录已添加", raw: result.raw });
+                    }
+                    case "smartsheet_update_external_records": {
+                        const result = await docClient.smartTableUpdateExternalRecords({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格外部记录已更新", raw: result.raw });
+                    }
+                    case "smartsheet_add_records": {
+                        const result = await docClient.smartTableAddRecords({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格记录已添加", raw: result.raw });
+                    }
+                    case "smartsheet_update_records": {
+                        const result = await docClient.smartTableUpdateRecords({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格记录已更新", raw: result.raw });
+                    }
+                    case "smartsheet_del_records": {
+                        const result = await docClient.smartTableDelRecords({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格记录已删除", raw: result.raw });
+                    }
+                    case "smartsheet_get_records": {
+                        const result = await docClient.smartTableGetRecords({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格记录列表已获取", raw: result.raw });
+                    }
+                    case "smartsheet_get_sheets": {
+                        const result = await docClient.smartTableGetSheets({
+                            agent: account,
+                            docId: params.docId,
                         });
                         return buildToolResult({
                             ok: true,
-                            action,
+                            action: "smartsheet_get_sheets",
                             accountId: account.accountId,
                             docId: params.docId,
-                            summary: `智能表格操作（${operation}）已执行`,
+                            summary: `智能表格子表列表已获取：${result.sheets.length} 个`,
                             raw: result.raw,
                         });
+                    }
+                    case "smartsheet_get_sheet_priv": {
+                        const result = await docClient.smartTableGetSheetPriv({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格子表权限已获取", raw: result.raw });
+                    }
+                    case "smartsheet_mod_sheet_priv": {
+                        const result = await docClient.smartTableModSheetPriv({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格子表权限已修改", raw: result.raw });
+                    }
+                    case "smartsheet_add_member_priv": {
+                        const result = await docClient.smartTableAddMemberPriv({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格成员额外权限已添加", raw: result.raw });
+                    }
+                    case "smartsheet_mod_member_priv": {
+                        const result = await docClient.smartTableModMemberPriv({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格成员额外权限已修改", raw: result.raw });
+                    }
+                    case "smartsheet_del_member_priv": {
+                        const result = await docClient.smartTableDelMemberPriv({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格成员额外权限已删除", raw: result.raw });
+                    }
+                    case "doc_assign_advanced_account": {
+                        const result = await docClient.assignDocAdvancedAccount({ agent: account, userid_list: params.userid_list });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, summary: summarizeAdvancedAccount(result.raw, "assign"), raw: result.raw });
+                    }
+                    case "doc_cancel_advanced_account": {
+                        const result = await docClient.cancelDocAdvancedAccount({ agent: account, userid_list: params.userid_list });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, summary: summarizeAdvancedAccount(result.raw, "cancel"), raw: result.raw });
+                    }
+                    case "doc_get_advanced_account_list": {
+                        const result = await docClient.getDocAdvancedAccountList({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, summary: summarizeAdvancedAccount(result, "list"), raw: result.raw });
+                    }
+                    case "upload_doc_image": {
+                        const result = await docClient.uploadDocImage({ agent: account, file_path: params.file_path });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, summary: "图片上传成功", raw: result });
                     }
                     default:
                         throw new Error(`Unsupported action: ${String(action)}`);
