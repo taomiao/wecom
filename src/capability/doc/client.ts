@@ -558,7 +558,14 @@ export class WecomDocClient {
             agent,
             body: { docid: readString(docId) },
         });
-        return { raw: json, content: json.content || json };
+        
+        // Ensure structure matches official API: { version: number, document: Node }
+        // If 'document' field is missing, fallback to raw response to avoid data loss
+        return {
+            raw: json,
+            version: json.version,
+            document: json.document || json.content || json
+        };
     }
 
     async updateDocContent(params: { agent: ResolvedAgentAccount; docId: string; requests: unknown[]; version?: number }) {
@@ -646,8 +653,8 @@ export class WecomDocClient {
     async modifySheetProperties(params: { agent: ResolvedAgentAccount; docId: string; requests: unknown[] }) {
         const { agent, docId, requests } = params;
         const json = await this.postWecomDocApi({
-            path: "/cgi-bin/wedoc/spreadsheet/modify_sheet_properties",
-            actionLabel: "modify_sheet_properties",
+            path: "/cgi-bin/wedoc/spreadsheet/batch_update",
+            actionLabel: "spreadsheet_batch_update",
             agent, body: { docid: readString(docId), requests: readArray(requests) },
         });
         return { raw: json, docId: docId };

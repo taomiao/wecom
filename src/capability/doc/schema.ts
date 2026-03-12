@@ -627,24 +627,16 @@ export const wecomDocToolSchema = {
                 requests: {
                     type: "array",
                     minItems: 1,
-                    description: "修改属性请求列表，按官方 modify_sheet_properties 定义",
+                    maxItems: 5,
+                    description: "修改属性请求列表，必须遵循企业微信 modify_sheet_properties 定义",
                     items: {
                         type: "object",
+                        additionalProperties: true,
                         oneOf: [
-                            { required: ["update_range_property"] },
-                            { required: ["add_sheet"] },
-                            { required: ["delete_sheet"] },
-                            { required: ["update_sheet_property"] },
-                            { required: ["add_row"] },
-                            { required: ["add_column"] },
-                            { required: ["delete_row"] },
-                            { required: ["delete_column"] },
-                            { required: ["hide_row"] },
-                            { required: ["hide_column"] },
-                            { required: ["move_row"] },
-                            { required: ["move_column"] },
-                            { required: ["frozen_row_column"] },
-                            { required: ["update_dimension_property"] }
+                            { required: ["add_sheet_request"] },
+                            { required: ["update_range_request"] },
+                            { required: ["delete_dimension_request"] },
+                            { required: ["delete_sheet_request"] }
                         ]
                     }
                 },
