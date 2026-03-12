@@ -963,21 +963,21 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                         const result = await docClient.smartTableGetSheetPriv({ agent: account, ...params });
                         return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格子表权限已获取", raw: result.raw });
                     }
-                    case "smartsheet_mod_sheet_priv": {
-                        const result = await docClient.smartTableModSheetPriv({ agent: account, ...params });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格子表权限已修改", raw: result.raw });
+                    case "smartsheet_update_sheet_priv": {
+                        const result = await docClient.smartTableUpdateSheetPriv({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格子表权限已更新", raw: result.raw });
                     }
-                    case "smartsheet_add_member_priv": {
-                        const result = await docClient.smartTableAddMemberPriv({ agent: account, ...params });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格成员额外权限已添加", raw: result.raw });
+                    case "smartsheet_create_rule": {
+                        const result = await docClient.smartTableCreateRule({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: `智能表格成员额外权限规则已创建 (rule_id: ${result.rule_id})`, raw: result.raw });
                     }
-                    case "smartsheet_mod_member_priv": {
-                        const result = await docClient.smartTableModMemberPriv({ agent: account, ...params });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格成员额外权限已修改", raw: result.raw });
+                    case "smartsheet_mod_rule_member": {
+                        const result = await docClient.smartTableModRuleMember({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格成员额外权限成员已更新", raw: result.raw });
                     }
-                    case "smartsheet_del_member_priv": {
-                        const result = await docClient.smartTableDelMemberPriv({ agent: account, ...params });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格成员额外权限已删除", raw: result.raw });
+                    case "smartsheet_delete_rule": {
+                        const result = await docClient.smartTableDeleteRule({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格成员额外权限规则已删除", raw: result.raw });
                     }
                     case "doc_assign_advanced_account": {
                         const result = await docClient.assignDocAdvancedAccount({ agent: account, userid_list: params.userid_list });

@@ -795,44 +795,52 @@ export class WecomDocClient {
         return { raw: json };
     }
 
-    async smartTableModSheetPriv(params: { agent: ResolvedAgentAccount; docId: string; rule_list: any[] }) {
-        const { agent, docId, rule_list } = params;
+    async smartTableUpdateSheetPriv(params: { agent: ResolvedAgentAccount; docId: string; type: number; rule_id?: number; name?: string; priv_list: any[] }) {
+        const { agent, docId, type, rule_id, name, priv_list } = params;
+        const body: any = { docid: readString(docId), type, priv_list };
+        if (rule_id !== undefined) body.rule_id = rule_id;
+        if (name !== undefined) body.name = name;
+        
         const json = await this.postWecomDocApi({
-            path: "/cgi-bin/wedoc/smartsheet/content_priv/mod_sheet_priv",
-            actionLabel: "smartsheet_mod_sheet_priv",
+            path: "/cgi-bin/wedoc/smartsheet/content_priv/update_sheet_priv",
+            actionLabel: "smartsheet_update_sheet_priv",
             agent,
-            body: { docid: readString(docId), rule_list },
+            body,
         });
         return { raw: json };
     }
 
-    async smartTableAddMemberPriv(params: { agent: ResolvedAgentAccount; docId: string; member_priv_list: any[] }) {
-        const { agent, docId, member_priv_list } = params;
+    async smartTableCreateRule(params: { agent: ResolvedAgentAccount; docId: string; name: string }) {
+        const { agent, docId, name } = params;
         const json = await this.postWecomDocApi({
-            path: "/cgi-bin/wedoc/smartsheet/content_priv/add_member_priv",
-            actionLabel: "smartsheet_add_member_priv",
+            path: "/cgi-bin/wedoc/smartsheet/content_priv/create_rule",
+            actionLabel: "smartsheet_create_rule",
             agent,
-            body: { docid: readString(docId), member_priv_list },
+            body: { docid: readString(docId), name },
+        });
+        return { raw: json, rule_id: json.rule_id };
+    }
+
+    async smartTableModRuleMember(params: { agent: ResolvedAgentAccount; docId: string; rule_id: number; add_member_range?: any; del_member_range?: any }) {
+        const { agent, docId, rule_id, add_member_range, del_member_range } = params;
+        const body: any = { docid: readString(docId), rule_id };
+        if (add_member_range) body.add_member_range = add_member_range;
+        if (del_member_range) body.del_member_range = del_member_range;
+
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/content_priv/mod_rule_member",
+            actionLabel: "smartsheet_mod_rule_member",
+            agent,
+            body,
         });
         return { raw: json };
     }
 
-    async smartTableModMemberPriv(params: { agent: ResolvedAgentAccount; docId: string; member_priv_list: any[] }) {
-        const { agent, docId, member_priv_list } = params;
-        const json = await this.postWecomDocApi({
-            path: "/cgi-bin/wedoc/smartsheet/content_priv/mod_member_priv",
-            actionLabel: "smartsheet_mod_member_priv",
-            agent,
-            body: { docid: readString(docId), member_priv_list },
-        });
-        return { raw: json };
-    }
-
-    async smartTableDelMemberPriv(params: { agent: ResolvedAgentAccount; docId: string; rule_id_list: number[] }) {
+    async smartTableDeleteRule(params: { agent: ResolvedAgentAccount; docId: string; rule_id_list: number[] }) {
         const { agent, docId, rule_id_list } = params;
         const json = await this.postWecomDocApi({
-            path: "/cgi-bin/wedoc/smartsheet/content_priv/del_member_priv",
-            actionLabel: "smartsheet_del_member_priv",
+            path: "/cgi-bin/wedoc/smartsheet/content_priv/delete_rule",
+            actionLabel: "smartsheet_delete_rule",
             agent,
             body: { docid: readString(docId), rule_id_list },
         });

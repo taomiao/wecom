@@ -53,24 +53,142 @@ const nonEmptyObjectProperty = {
     minProperties: 1,
 };
 
-const docMemberEntryProperty = {
-    oneOf: [
-        {
-            type: "string",
-            minLength: 1,
-        },
-        {
-            type: "object",
-            additionalProperties: true,
-            minProperties: 1,
-        },
-    ],
+// --- Doc Permission Schemas ---
+
+const coAuthListProperty = {
+    type: "array",
+    items: {
+        type: "object",
+        required: ["departmentid", "auth", "type"],
+        properties: {
+            departmentid: { type: "integer", description: "特定部门id" },
+            auth: { type: "integer", enum: [1, 2], description: "1:只读, 2:读写" },
+            type: { type: "integer", const: 2, description: "2:部门" }
+        }
+    }
 };
 
-const docMemberEntryArrayProperty = {
+const docMemberListProperty = {
     type: "array",
-    minItems: 1,
-    items: docMemberEntryProperty,
+    items: {
+        type: "object",
+        required: ["type", "auth"],
+        properties: {
+            type: { type: "integer", const: 1, description: "1:用户" },
+            userid: { type: "string", description: "企业成员userid" },
+            tmp_external_userid: { type: "string", description: "外部用户临时id" },
+            auth: { type: "integer", enum: [1, 2, 7], description: "1:只读 2:读写 7:管理员" }
+        }
+    }
+};
+
+const delDocMemberListProperty = {
+    type: "array",
+    items: {
+        type: "object",
+        required: ["type"],
+        properties: {
+            type: { type: "integer", const: 1 },
+            userid: { type: "string" },
+            tmp_external_userid: { type: "string" }
+        }
+    }
+};
+
+const watermarkProperty = {
+    type: "object",
+    properties: {
+        margin_type: { type: "integer", enum: [1, 2], description: "1:稀疏, 2:紧密" },
+        show_visitor_name: { type: "boolean" },
+        show_text: { type: "boolean" },
+        text: { type: "string" }
+    }
+};
+
+// --- Smartsheet Permission Schemas ---
+
+const fieldRuleListSchema = {
+    type: "array",
+    items: {
+        type: "object",
+        required: ["field_id", "can_edit", "can_insert", "can_view"],
+        properties: {
+            field_id: { type: "string" },
+            field_type: { type: "string" },
+            can_edit: { type: "boolean" },
+            can_insert: { type: "boolean" },
+            can_view: { type: "boolean" }
+        }
+    }
+};
+
+const fieldPrivSchema = {
+    type: "object",
+    required: ["field_range_type", "field_rule_list"],
+    properties: {
+        field_range_type: { type: "integer", enum: [1, 2], description: "1-所有字段；2-部分字段" },
+        field_rule_list: fieldRuleListSchema,
+        field_default_rule: {
+             type: "object",
+             properties: {
+                 can_edit: { type: "boolean" },
+                 can_insert: { type: "boolean" },
+                 can_view: { type: "boolean" }
+             }
+        }
+    }
+};
+
+const recordRuleListSchema = {
+    type: "array",
+    items: {
+        type: "object",
+        required: ["field_id", "oper_type"],
+        properties: {
+            field_id: { type: "string" },
+            field_type: { type: "string" },
+            oper_type: { type: "integer", description: "1-包含自己; 2-包含value; 3-不包含; 4-等于; 5-不等于; 6-为空; 7-非空" },
+            value: { type: "array", items: { type: "string" } }
+        }
+    }
+};
+
+const recordPrivSchema = {
+    type: "object",
+    required: ["record_range_type"],
+    properties: {
+        record_range_type: { type: "integer", enum: [1, 2, 3], description: "1-全部; 2-任意条件; 3-全部条件" },
+        record_rule_list: recordRuleListSchema,
+        other_priv: { type: "integer", enum: [1, 2], description: "1-不可编辑; 2-不可查看" }
+    }
+};
+
+const privListSchema = {
+    type: "array",
+    items: {
+        type: "object",
+        required: ["sheet_id", "priv"],
+        properties: {
+            sheet_id: { type: "string" },
+            priv: { 
+                oneOf: [{ type: "string" }, { type: "integer" }],
+                description: "1-全部权限；2-可编辑；3-仅浏览；4-无权限" 
+            },
+            can_insert_record: { type: "boolean" },
+            can_delete_record: { type: "boolean" },
+            can_create_modify_delete_view: { type: "boolean" },
+            field_priv: fieldPrivSchema,
+            record_priv: recordPrivSchema,
+            clear: { type: "boolean" }
+        }
+    }
+};
+
+const memberRangeSchema = {
+    type: "object",
+    properties: {
+        userid_list: { type: "array", items: { type: "string" } }
+    }
 };
 
 // --- Doc Content Update Schemas ---
@@ -292,6 +410,19 @@ const updateRangeRequest = {
 };
 
 
+const docMemberEntryProperty = {
+    oneOf: [
+        { type: "string", minLength: 1 },
+        { type: "object", additionalProperties: true, minProperties: 1 },
+    ],
+};
+
+const docMemberEntryArrayProperty = {
+    type: "array",
+    minItems: 1,
+    items: docMemberEntryProperty,
+};
+
 export const wecomDocToolSchema = {
     oneOf: [
         {
@@ -481,7 +612,7 @@ export const wecomDocToolSchema = {
                 request: {
                     type: "object",
                     description: "mod_doc_join_rule 请求体。插件会自动补 docid。",
-                    additionalProperties: true,
+                    additionalProperties: false,
                     properties: {
                          enable_corp_internal: { type: "boolean" },
                          corp_internal_auth: { type: "integer", description: "1:只读 2:读写" },
@@ -491,17 +622,7 @@ export const wecomDocToolSchema = {
                          corp_external_approve_only_by_admin: { type: "boolean" },
                          ban_share_external: { type: "boolean" },
                          update_co_auth_list: { type: "boolean" },
-                         co_auth_list: { 
-                             type: "array",
-                             items: {
-                                 type: "object",
-                                 properties: {
-                                     departmentid: { type: "integer" },
-                                     auth: { type: "integer" },
-                                     type: { type: "integer" }
-                                 }
-                             }
-                         }
+                         co_auth_list: coAuthListProperty
                     }
                 },
             },
@@ -616,33 +737,10 @@ export const wecomDocToolSchema = {
                 request: {
                     type: "object",
                     description: "mod_doc_member 请求体。插件会自动补 docid。",
-                    additionalProperties: true,
+                    additionalProperties: false,
                     properties: {
-                        update_file_member_list: {
-                            type: "array",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    type: { type: "integer", enum: [1], description: "1:用户" },
-                                    auth: { type: "integer", enum: [1, 2, 7], description: "1:只读 2:读写 7:管理" },
-                                    userid: { type: "string" },
-                                    tmp_external_userid: { type: "string" }
-                                },
-                                required: ["type", "auth"]
-                            }
-                        },
-                        del_file_member_list: {
-                            type: "array",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    type: { type: "integer", enum: [1] },
-                                    userid: { type: "string" },
-                                    tmp_external_userid: { type: "string" }
-                                },
-                                required: ["type"]
-                            }
-                        }
+                        update_file_member_list: docMemberListProperty,
+                        del_file_member_list: delDocMemberListProperty
                     }
                 },
             },
@@ -657,20 +755,11 @@ export const wecomDocToolSchema = {
                 docId: docIdProperty,
                 request: {
                     type: "object",
-                    description: "mod_doc_safty_setting 请求体；包含 enable_readonly_copy, watermark 等",
-                    additionalProperties: true,
+                    description: "mod_doc_safty_setting 请求体",
+                    additionalProperties: false,
                     properties: {
                         enable_readonly_copy: { type: "boolean", description: "是否允许只读成员复制、下载" },
-                        watermark: {
-                            type: "object",
-                            description: "水印设置",
-                            properties: {
-                                margin_type: { type: "integer", description: "1:稀疏，2:紧密" },
-                                show_visitor_name: { type: "boolean" },
-                                show_text: { type: "boolean" },
-                                text: { type: "string" },
-                            },
-                        },
+                        watermark: watermarkProperty,
                     },
                 },
             },
@@ -1151,7 +1240,7 @@ export const wecomDocToolSchema = {
                 action: { const: "smartsheet_add_records" },
                 accountId: accountIdProperty,
                 docId: docIdProperty,
-                sheetId: sheetIdProperty,
+                sheetId: { type: "string", description: "子表 ID" },
                 records: { type: "array", items: nonEmptyObjectProperty, description: "记录列表" },
             },
         },
@@ -1163,8 +1252,8 @@ export const wecomDocToolSchema = {
                 action: { const: "smartsheet_update_records" },
                 accountId: accountIdProperty,
                 docId: docIdProperty,
-                sheetId: sheetIdProperty,
-                records: { type: "array", items: nonEmptyObjectProperty, description: "记录列表" },
+                sheetId: { type: "string", description: "子表 ID" },
+                records: { type: "array", items: nonEmptyObjectProperty, description: "更新记录列表，需包含 record_id" },
             },
         },
         {
@@ -1175,7 +1264,7 @@ export const wecomDocToolSchema = {
                 action: { const: "smartsheet_del_records" },
                 accountId: accountIdProperty,
                 docId: docIdProperty,
-                sheetId: sheetIdProperty,
+                sheetId: { type: "string", description: "子表 ID" },
                 record_ids: { type: "array", items: { type: "string" }, description: "记录 ID 列表" },
             },
         },
@@ -1187,8 +1276,8 @@ export const wecomDocToolSchema = {
                 action: { const: "smartsheet_get_records" },
                 accountId: accountIdProperty,
                 docId: docIdProperty,
-                sheetId: sheetIdProperty,
-                record_ids: { type: "array", items: { type: "string" }, description: "可选：记录 ID 列表" },
+                sheetId: { type: "string", description: "子表 ID" },
+                record_ids: { type: "array", items: { type: "string" }, description: "可选：指定记录 ID 列表" },
                 offset: { type: "integer" },
                 limit: { type: "integer" },
             },
@@ -1208,34 +1297,43 @@ export const wecomDocToolSchema = {
         {
             type: "object",
             additionalProperties: false,
-            required: ["action", "docId"],
+            required: ["action", "docId", "priv_list"],
+            anyOf: [
+                { required: ["rule_id"] },
+                { required: ["name"] }
+            ],
             properties: {
-                action: { const: "smartsheet_mod_sheet_priv" },
+                action: { const: "smartsheet_update_sheet_priv" },
                 accountId: accountIdProperty,
                 docId: docIdProperty,
-                rule_list: { type: "array", items: nonEmptyObjectProperty, description: "权限规则列表" },
+                type: { type: "integer", enum: [1, 2], const: 2, description: "必须为2 (额外权限) ? 或支持1? 文档update_sheet_priv支持更新全员(type=1)或额外(type=2)" },
+                rule_id: { type: "integer" },
+                name: { type: "string" },
+                priv_list: privListSchema,
             },
         },
         {
             type: "object",
             additionalProperties: false,
-            required: ["action", "docId", "member_priv_list"],
+            required: ["action", "docId", "name"],
             properties: {
-                action: { const: "smartsheet_add_member_priv" },
+                action: { const: "smartsheet_create_rule" },
                 accountId: accountIdProperty,
                 docId: docIdProperty,
-                member_priv_list: { type: "array", items: nonEmptyObjectProperty, description: "成员额外权限列表" },
+                name: { type: "string", description: "权限规则名称" },
             },
         },
         {
             type: "object",
             additionalProperties: false,
-            required: ["action", "docId", "member_priv_list"],
+            required: ["action", "docId", "rule_id"],
             properties: {
-                action: { const: "smartsheet_mod_member_priv" },
+                action: { const: "smartsheet_mod_rule_member" },
                 accountId: accountIdProperty,
                 docId: docIdProperty,
-                member_priv_list: { type: "array", items: nonEmptyObjectProperty, description: "成员额外权限列表，需包含 rule_id" },
+                rule_id: { type: "integer" },
+                add_member_range: memberRangeSchema,
+                del_member_range: memberRangeSchema
             },
         },
         {
@@ -1243,7 +1341,7 @@ export const wecomDocToolSchema = {
             additionalProperties: false,
             required: ["action", "docId", "rule_id_list"],
             properties: {
-                action: { const: "smartsheet_del_member_priv" },
+                action: { const: "smartsheet_delete_rule" },
                 accountId: accountIdProperty,
                 docId: docIdProperty,
                 rule_id_list: { type: "array", items: { type: "integer" }, description: "规则 ID 列表" },
