@@ -563,11 +563,22 @@ export class WecomDocClient {
 
     async updateDocContent(params: { agent: ResolvedAgentAccount; docId: string; requests: unknown[]; version?: number }) {
         const { agent, docId, requests, version } = params;
+        
+        // Validate requests structure basic check
+        const requestList = readArray(requests);
+        if (requestList.length === 0) {
+             throw new Error("requests list cannot be empty");
+        }
+
         const body: Record<string, unknown> = {
             docid: readString(docId),
-            requests: readArray(requests),
+            requests: requestList,
         };
-        if (version !== undefined) body.version = version;
+        // version is optional but recommended for concurrency control
+        if (version !== undefined && version !== null) {
+            body.version = Number(version);
+        }
+        
         const json = await this.postWecomDocApi({
             path: "/cgi-bin/wedoc/document/batch_update",
             actionLabel: "update_doc_content",

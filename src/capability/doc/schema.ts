@@ -260,8 +260,30 @@ export const wecomDocToolSchema = {
                 accountId: accountIdProperty,
                 docId: docIdProperty,
                 request: {
-                    ...nonEmptyObjectProperty,
+                    type: "object",
                     description: "mod_doc_join_rule 请求体。插件会自动补 docid。",
+                    additionalProperties: true,
+                    properties: {
+                         enable_corp_internal: { type: "boolean" },
+                         corp_internal_auth: { type: "integer", description: "1:只读 2:读写" },
+                         enable_corp_external: { type: "boolean" },
+                         corp_external_auth: { type: "integer", description: "1:只读 2:读写" },
+                         corp_internal_approve_only_by_admin: { type: "boolean" },
+                         corp_external_approve_only_by_admin: { type: "boolean" },
+                         ban_share_external: { type: "boolean" },
+                         update_co_auth_list: { type: "boolean" },
+                         co_auth_list: { 
+                             type: "array",
+                             items: {
+                                 type: "object",
+                                 properties: {
+                                     departmentid: { type: "integer" },
+                                     auth: { type: "integer" },
+                                     type: { type: "integer" }
+                                 }
+                             }
+                         }
+                    }
                 },
             },
         },
@@ -346,8 +368,28 @@ export const wecomDocToolSchema = {
                 requests: {
                     type: "array",
                     minItems: 1,
-                    description: "操作列表，按企业微信官方 batch_update 定义填写",
-                    items: nonEmptyObjectProperty,
+                    description: "操作列表，必须遵循企业微信 batch_update 格式：[{ replace_text: {...} }, { insert_text: {...} }]",
+                    items: {
+                        type: "object",
+                        additionalProperties: true,
+                        oneOf: [
+                            { required: ["replace_text"] },
+                            { required: ["insert_text"] },
+                            { required: ["delete_text"] },
+                            { required: ["update_text_property"] },
+                            { required: ["replace_image"] },
+                            { required: ["insert_image"] },
+                            { required: ["delete_paragraph"] },
+                            { required: ["insert_table"] },
+                            { required: ["insert_row"] },
+                            { required: ["insert_column"] },
+                            { required: ["delete_row"] },
+                            { required: ["delete_column"] },
+                            { required: ["merge_cells"] },
+                            { required: ["split_cells"] },
+                            { required: ["update_table_property"] }
+                        ]
+                    },
                 },
             },
         },
@@ -360,8 +402,36 @@ export const wecomDocToolSchema = {
                 accountId: accountIdProperty,
                 docId: docIdProperty,
                 request: {
-                    ...nonEmptyObjectProperty,
+                    type: "object",
                     description: "mod_doc_member 请求体。插件会自动补 docid。",
+                    additionalProperties: true,
+                    properties: {
+                        update_file_member_list: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    type: { type: "integer", enum: [1], description: "1:用户" },
+                                    auth: { type: "integer", enum: [1, 2, 7], description: "1:只读 2:读写 7:管理" },
+                                    userid: { type: "string" },
+                                    tmp_external_userid: { type: "string" }
+                                },
+                                required: ["type", "auth"]
+                            }
+                        },
+                        del_file_member_list: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    type: { type: "integer", enum: [1] },
+                                    userid: { type: "string" },
+                                    tmp_external_userid: { type: "string" }
+                                },
+                                required: ["type"]
+                            }
+                        }
+                    }
                 },
             },
         },
@@ -506,8 +576,23 @@ export const wecomDocToolSchema = {
                     description: "在线表格 docid",
                 },
                 request: {
-                    ...nonEmptyObjectProperty,
+                    type: "object",
                     description: "编辑表格请求体，按企业微信官方 edit_data 定义填写",
+                    additionalProperties: true,
+                    properties: {
+                         sheet_id: { type: "string" },
+                         range: { type: "string" },
+                         values: { 
+                             type: "array",
+                             items: { 
+                                 type: "array",
+                                 items: { 
+                                     type: "object",
+                                     properties: { text: { type: "string" }, url: { type: "string" } }
+                                 }
+                             }
+                         }
+                    }
                 },
             },
         },
@@ -548,8 +633,26 @@ export const wecomDocToolSchema = {
                 requests: {
                     type: "array",
                     minItems: 1,
-                    description: "修改属性请求列表",
-                    items: nonEmptyObjectProperty,
+                    description: "修改属性请求列表，按官方 modify_sheet_properties 定义",
+                    items: {
+                        type: "object",
+                        oneOf: [
+                            { required: ["update_range_property"] },
+                            { required: ["add_sheet"] },
+                            { required: ["delete_sheet"] },
+                            { required: ["update_sheet_property"] },
+                            { required: ["add_row"] },
+                            { required: ["add_column"] },
+                            { required: ["delete_row"] },
+                            { required: ["delete_column"] },
+                            { required: ["hide_row"] },
+                            { required: ["hide_column"] },
+                            { required: ["move_row"] },
+                            { required: ["move_column"] },
+                            { required: ["frozen_row_column"] },
+                            { required: ["update_dimension_property"] }
+                        ]
+                    }
                 },
             },
         },
