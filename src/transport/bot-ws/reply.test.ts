@@ -83,15 +83,20 @@ describe("createBotWsReplyHandle", () => {
     expect(replyStream).not.toHaveBeenCalled();
   });
 
-  it("does not retry error reply when req_id is already invalid", async () => {
-    const replyStream = vi.fn().mockResolvedValue(undefined);
+  it("swallows expired stream update errors during delivery", async () => {
+    const expiredError = {
+      headers: { req_id: "req-expired" },
+      errcode: 846608,
+      errmsg: "stream message update expired (>6 minutes), cannot update",
+    };
+    const replyStream = vi.fn().mockRejectedValue(expiredError);
     const onFail = vi.fn();
     const handle = createBotWsReplyHandle({
       client: {
         replyStream,
       } as unknown as ReplyHandleParams["client"],
       frame: {
-        headers: { req_id: "req-invalid" },
+        headers: { req_id: "req-expired" },
         body: {},
       } as unknown as ReplyHandleParams["frame"],
       accountId: "default",
@@ -99,11 +104,32 @@ describe("createBotWsReplyHandle", () => {
       onFail,
     });
 
-    await handle.fail?.({
-      headers: { req_id: "req-invalid" },
-      errcode: 846605,
-      errmsg: "invalid req_id",
+    await expect(handle.deliver({ text: "最终回复" }, { kind: "final" })).resolves.toBeUndefined();
+
+    expect(replyStream).toHaveBeenCalledTimes(1);
+    expect(onFail).toHaveBeenCalledWith(expiredError);
+  });
+
+  it.each([
+    [{ headers: { req_id: "req-invalid" }, errcode: 846605, errmsg: "invalid req_id" }],
+    [{ headers: { req_id: "req-expired" }, errcode: 846608, errmsg: "stream message update expired (>6 minutes), cannot update" }],
+  ])("does not retry error reply when the ws reply window is already closed", async (error) => {
+    const replyStream = vi.fn().mockResolvedValue(undefined);
+    const onFail = vi.fn();
+    const handle = createBotWsReplyHandle({
+      client: {
+        replyStream,
+      } as unknown as ReplyHandleParams["client"],
+      frame: {
+        headers: { req_id: String(error.headers.req_id) },
+        body: {},
+      } as unknown as ReplyHandleParams["frame"],
+      accountId: "default",
+      autoSendPlaceholder: false,
+      onFail,
     });
+
+    await handle.fail?.(error);
 
     expect(replyStream).not.toHaveBeenCalled();
     expect(onFail).toHaveBeenCalledTimes(1);

@@ -16,6 +16,7 @@
 <p align="center">
   <a href="#sec-1">💡 核心价值</a> •
   <a href="#sec-2">📊 模式对比</a> •
+  <a href="#sec-changelog">📋 最近更新</a> •
   <a href="#sec-3">一、快速开始</a> •
   <a href="#sec-4">二、配置说明</a> •
   <a href="#sec-5">三、企业微信接入</a> •
@@ -92,6 +93,48 @@
 | **交互卡片 (A2UI)**| ❌ 不支持 | ✅ **支持** (Button/Select等) | **✅ 支持** |
 | **AI 流式响应** | ✅ **支持** (丝滑打字机) | ❌ 不支持 (全部生成完一次发送) | **✅ 完美支持** |
 | **主动触达 (Cron)**| ❌ 仅被动回复/有限推送 | ✅ **全量推送** (指定人/部门/标签) | **✅ 企业级触达** |
+
+---
+
+<a id="sec-changelog"></a>
+
+## 📋 最近更新
+
+> 项目保持高频迭代，核心改进一览：
+
+#### v2.3.12（2026-03-12）
+
+- 🛠 **[重要修复]** Bot WS 流式回复超 6 分钟后的 `846608 stream message update expired` 现在被识别为终态错误，不再导致进程退出。
+- 🛠 **[重要修复]** SDK 5 秒回执超时 (`Reply ack timeout`) 也被识别为终态错误，超时后立即停止占位保活，不再产生 `unhandledRejection`。
+- 🚀 Bot WS 模式下主动文本消息优先走 WS 长连接；Agent 仅兜底文件/媒体或未启用 WS 的场景。
+- 🧯 `sdk-adapter` 为 WebSocket frame 异步处理补上显式兜底捕获，漏网异常记录为 runtime issue 而非崩溃。
+- ⏱ 回复窗口过期时占位符保活立即停止。
+
+#### v2.3.11（2026-03-11）
+
+- `Bot WS` 升级为即时占位 + 持续保活，降低长思考时的 `invalid req_id`。
+- `streamPlaceholderContent` 统一作用于 `Bot WS` 与 `Bot Webhook`。
+- onboarding 在空配置下也会提供 `default` 账号选项。
+
+#### v2.3.10（2026-03-10）
+
+- onboarding 默认收敛为 `Bot + WS + 开放私聊`。
+- 修复 `Bot WS` 长文本双重回复问题。
+- Agent 新配置统一使用 `agentSecret`。
+
+<details>
+<summary>更早版本</summary>
+
+#### v2.3.9（2026-03-09）
+
+- Bot 默认接入改为 `WebSocket`，无需域名更易上手。
+- 完善中文 onboarding，减少重复提示。
+- 恢复 `Bot WS` 流式输出能力。
+- 增强 Agent 回调与发送日志，排障更直接。
+
+</details>
+
+详细版本记录见 `changelog/` 目录。
 
 ---
 
@@ -435,33 +478,6 @@ openclaw channels status --deep
 <a id="sec-9"></a>
 
 ## 七、📮 联系我 与 版本协议
-
-### 最近更新
-
-近期保持高频迭代，最近版本如下：
-
-#### v2.3.11（2026-03-11）
-
-- `Bot WS` 升级为即时占位 + 持续保活，降低长思考时的 `invalid req_id`。
-- `streamPlaceholderContent` 统一作用于 `Bot WS` 与 `Bot Webhook`。
-- onboarding 在空配置下也会提供 `default` 账号选项。
-- README 补充多账号共用静态 Agent 时的 session 隔离建议。
-
-#### v2.3.10（2026-03-10）
-
-- onboarding 默认收敛为 `Bot + WS + 开放私聊`。
-- 修复 `Bot WS` 长文本双重回复问题。
-- 修复首个自定义接入标识时报 `default not found`。
-- Agent 新配置统一使用 `agentSecret`。
-
-#### v2.3.9（2026-03-09）
-
-- Bot 默认接入改为 `WebSocket`，无需域名更易上手。
-- 完善中文 onboarding，减少重复提示。
-- 恢复 `Bot WS` 流式输出能力。
-- 增强 Agent 回调与发送日志，排障更直接。
-
-详细版本记录见 `changelog/v2.3.11.md`、`changelog/v2.3.10.md` 与 `changelog/v2.3.9.md`。
 
 微信交流群（扫码入群）：
 
