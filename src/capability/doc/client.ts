@@ -559,12 +559,11 @@ export class WecomDocClient {
             body: { docid: readString(docId) },
         });
         
-        // Ensure structure matches official API: { version: number, document: Node }
-        // If 'document' field is missing, fallback to raw response to avoid data loss
+        // Ensure structure strictly matches official API: { version: number, document: Node }
         return {
             raw: json,
             version: json.version,
-            document: json.document || json.content || json
+            document: json.document
         };
     }
 
