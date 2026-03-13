@@ -726,12 +726,11 @@ async function processAgentMessage(params: {
 
                     // 企业微信文本消息长度限制处理（约2048字节，安全起见按600字符切分）
                     const MAX_CHUNK_SIZE = 600;
-                    let remainingText = text;
                     
-                    while (remainingText.length > 0) {
-                        const chunk = remainingText.slice(0, MAX_CHUNK_SIZE);
-                        remainingText = remainingText.slice(MAX_CHUNK_SIZE);
-
+                    // 确保分片顺序发送
+                    for (let i = 0; i < text.length; i += MAX_CHUNK_SIZE) {
+                        const chunk = text.slice(i, i + MAX_CHUNK_SIZE);
+                        
                         try {
                             // 统一策略：Agent 模式在群聊场景默认只私信触发者（避免 wr/wc chatId 86008）
                             await sendAgentApiText({ agent, toUser: fromUser, chatId: undefined, text: chunk });
@@ -751,9 +750,6 @@ async function processAgentMessage(params: {
                                 },
                                 error: message,
                             });
-                            // 如果分片发送失败，剩余部分可能也无法发送，但在当前逻辑中我们尝试继续发送后续分片，或者应该中断？
-                            // 通常网络错误或鉴权错误会导致所有失败，内容错误可能只影响一段。
-                            // 为了尽力交付，我们继续尝试发送下一段。
                         }
                     }
                 },
