@@ -704,6 +704,9 @@ async function processAgentMessage(params: {
         }
     }, 5000);
 
+    // 发送队列锁：确保所有 deliver 调用（以及内部的分片发送）严格串行执行
+    let messageSendQueue = Promise.resolve();
+
     try {
         // 调度回复
         await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
@@ -715,7 +718,7 @@ async function processAgentMessage(params: {
             dispatcherOptions: {
                 deliver: async (payload: { text?: string }, info: { kind: string }) => {
                     const text = payload.text ?? "";
-                    // 忽略空文本消息，避免发送无效内容
+                    // 忽略空文本消息
                     if (!text || !text.trim()) {
                         return;
                     }
@@ -724,39 +727,58 @@ async function processAgentMessage(params: {
                     hasResponseSent = true;
                     clearTimeout(processingTimer);
 
-                    // 企业微信文本消息长度限制处理（约2048字节，安全起见按600字符切分）
-                    const MAX_CHUNK_SIZE = 600;
-                    
-                    // 确保分片顺序发送
-                    for (let i = 0; i < text.length; i += MAX_CHUNK_SIZE) {
-                        const chunk = text.slice(i, i + MAX_CHUNK_SIZE);
-                        
-                        try {
-                            // 统一策略：Agent 模式在群聊场景默认只私信触发者（避免 wr/wc chatId 86008）
-                            await sendAgentApiText({ agent, toUser: fromUser, chatId: undefined, text: chunk });
-                            touchTransportSession?.({ lastOutboundAt: Date.now(), running: true });
-                            log?.(`[wecom-agent] reply chunk delivered (${info.kind}) to ${fromUser}, len=${chunk.length}`);
+                    // 将本次发送任务加入队列
+                    // 即使 deliver 被并发调用，队列中的任务也会按入队顺序串行执行
+                    const currentTask = async () => {
+                        const MAX_CHUNK_SIZE = 600;
+                        // 确保分片顺序发送
+                        for (let i = 0; i < text.length; i += MAX_CHUNK_SIZE) {
+                            const chunk = text.slice(i, i + MAX_CHUNK_SIZE);
                             
-                            // 增加 100ms 延时，确保企业微信服务端按序处理
-                            if (i + MAX_CHUNK_SIZE < text.length) {
-                                await new Promise(resolve => setTimeout(resolve, 100));
-                            }
-                        } catch (err: unknown) {
-                            const message = err instanceof Error ? `${err.message}${err.cause ? ` (cause: ${String(err.cause)})` : ""}` : String(err);
-                            error?.(`[wecom-agent] reply failed: ${message}`);
-                            auditSink?.({
-                                transport: "agent-callback",
-                                category: "fallback-delivery-failed",
-                                summary: `agent callback reply failed user=${fromUser} kind=${info.kind}`,
-                                raw: {
+                            try {
+                                await sendAgentApiText({ agent, toUser: fromUser, chatId: undefined, text: chunk });
+                                touchTransportSession?.({ lastOutboundAt: Date.now(), running: true });
+                                log?.(`[wecom-agent] reply chunk delivered (${info.kind}) to ${fromUser}, len=${chunk.length}`);
+                                
+                                // 强制延时：确保企业微信有足够时间处理顺序
+                                if (i + MAX_CHUNK_SIZE < text.length) {
+                                    await new Promise(resolve => setTimeout(resolve, 200));
+                                }
+                            } catch (err: unknown) {
+                                const message = err instanceof Error ? `${err.message}${err.cause ? ` (cause: ${String(err.cause)})` : ""}` : String(err);
+                                error?.(`[wecom-agent] reply failed: ${message}`);
+                                auditSink?.({
                                     transport: "agent-callback",
-                                    envelopeType: "xml",
-                                    body: msg,
-                                },
-                                error: message,
-                            });
+                                    category: "fallback-delivery-failed",
+                                    summary: `agent callback reply failed user=${fromUser} kind=${info.kind}`,
+                                    raw: {
+                                        transport: "agent-callback",
+                                        envelopeType: "xml",
+                                        body: msg,
+                                    },
+                                    error: message,
+                                });
+                            }
                         }
-                    }
+                        
+                        // 不同 Block 之间也增加一点间隔
+                        if (info.kind !== "final") {
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                        }
+                    };
+
+                    // 更新队列链
+                    // 使用 then 链接，并捕获前一个任务可能的错误，确保当前任务总能执行
+                    messageSendQueue = messageSendQueue
+                        .then(() => currentTask())
+                        .catch((err) => {
+                            error?.(`[wecom-agent] previous send task failed: ${String(err)}`);
+                            // 前一个失败不应阻止当前任务，继续尝试执行当前任务
+                            return currentTask();
+                        });
+
+                    // 等待当前任务完成（保持背压，虽然对于 http callback 模式这可能只是延迟了整体结束时间）
+                    await messageSendQueue;
                 },
                 onError: (err: unknown, info: { kind: string }) => {
                     clearTimeout(processingTimer);
@@ -766,6 +788,8 @@ async function processAgentMessage(params: {
         });
     } finally {
         clearTimeout(processingTimer);
+        // 确保所有排队的消息都发完了才退出（虽然对于 HTTP 响应来说，res.end 早就调用了）
+        await messageSendQueue;
     }
 }
 
