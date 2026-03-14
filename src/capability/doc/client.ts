@@ -656,20 +656,20 @@ export class WecomDocClient {
         
         // Build GridData with proper structure per WeCom API
         // If values provided (raw 2D array), convert to GridData format
-        // If gridData provided, use it directly (already in CellData format)
-        let gridDataObj: any = {};
+        // If gridData provided, normalize it
+        let finalGridData: any = {};
         if (values && Array.isArray(values)) {
             // Convert raw values to CellData format
-            gridDataObj = {
-                startRow,
-                startColumn,
+            finalGridData = {
+                start_row: startRow,
+                start_column: startColumn,
                 rows: values.map((rowValues: any[]) => ({
                     values: rowValues.map((cell: any) => this.normalizeCell(cell))
                 }))
             };
         } else if (gridData && typeof gridData === "object" && gridData.rows) {
-            // gridData already has rows, but may need normalization
-            gridDataObj = {
+            // gridData already has rows, normalize each cell
+            finalGridData = {
                 start_row: gridData.startRow ?? gridData.start_row ?? 0,
                 start_column: gridData.startColumn ?? gridData.start_column ?? 0,
                 rows: gridData.rows.map((row: any) => ({
@@ -677,74 +677,6 @@ export class WecomDocClient {
                 }))
             };
         }
-        
-        // Ensure rows have proper CellData structure: [{values: [{cell_value, cell_format}]}]
-        // Per official API: CellData = {cell_value: CellValue, cell_format?: CellFormat}
-        // CellValue = {text: string} or {link: {text, url}}
-        // CellFormat = {text_format: TextFormat}
-        // TextFormat = {font, font_size, bold, italic, strikethrough, underline, color}
-        // Color = {red, green, blue, alpha}
-        const rows = Array.isArray(gridDataObj.rows) ? gridDataObj.rows.map((row: any) => {
-            if (!row || typeof row !== "object") return { values: [] };
-            const values = Array.isArray(row.values) ? row.values.map((cell: any) => {
-                let cellValue: any;
-                let cellFormat: any;
-                
-                // Handle string cells
-                if (typeof cell === "string") {
-                    cellValue = { text: cell };
-                }
-                // Handle null/undefined
-                else if (!cell || typeof cell !== "object") {
-                    cellValue = { text: String(cell ?? "") };
-                }
-                else {
-                    // Handle cell with link (official API format)
-                    if (cell.link && typeof cell.link === "object") {
-                        cellValue = {
-                            link: {
-                                text: String(cell.link.text ?? cell.text ?? ""),
-                                url: String(cell.link.url ?? cell.url ?? "")
-                            }
-                        };
-                    }
-                    // Handle cell with text only (official API format)
-                    else if (cell.text != null) {
-                        cellValue = { text: String(cell.text) };
-                    }
-                    // Fallback
-                    else {
-                        cellValue = { text: String(cell ?? "") };
-                    }
-                    
-                    // Handle cell_format if provided
-                    if (cell.cell_format && typeof cell.cell_format === "object") {
-                        cellFormat = this.buildCellFormat(cell.cell_format);
-                    }
-                    // Handle inline format properties - only include defined values
-                    else if (cell.font !== undefined || cell.font_size !== undefined || 
-                             cell.bold !== undefined || cell.italic !== undefined || 
-                             cell.strikethrough !== undefined || cell.underline !== undefined || 
-                             cell.color !== undefined) {
-                        cellFormat = this.buildCellFormat(cell);
-                    }
-                }
-                
-                // Return CellData format per official API
-                const cellData: any = { cell_value: cellValue };
-                if (cellFormat) {
-                    cellData.cell_format = cellFormat;
-                }
-                return cellData;
-            }) : [];
-            return { values };
-        }) : [];
-        
-        const finalGridData = {
-            start_row: gridDataObj.startRow ?? startRow,
-            start_column: gridDataObj.startColumn ?? startColumn,
-            rows
-        };
         
         // Build batch_update request per official API
         const body = {
