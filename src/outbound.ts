@@ -49,7 +49,7 @@ function resolveAgentConfigOrThrow(params: {
     );
   }
   // 注意：不要在日志里输出 corpSecret 等敏感信息
-  console.log(`[wecom-outbound] Using agent config: accountId=${account.accountId}, corpId=${account.corpId}, agentId=${account.agentId}`);
+  getAccountRuntime(account.accountId)?.log.info?.(`[wecom-outbound] Using agent config: accountId=${account.accountId}, corpId=${account.corpId}, agentId=${account.agentId}`);
   return account;
 }
 
@@ -158,7 +158,7 @@ export const wecomOutbound: ChannelOutboundAdapter = {
 
     if (looksLikeNewSessionAck) {
       if (!isAgentSessionTarget) {
-        console.log(`[wecom-outbound] Suppressed command ack to avoid Bot/Agent double-reply (len=${trimmed.length})`);
+        getAccountRuntime(agent.accountId)?.log.info?.(`[wecom-outbound] Suppressed command ack to avoid Bot/Agent double-reply (len=${trimmed.length})`);
         return { channel: "wecom", messageId: `suppressed-${Date.now()}`, timestamp: Date.now() };
       }
 
@@ -167,11 +167,11 @@ export const wecomOutbound: ChannelOutboundAdapter = {
         return m?.[1]?.trim();
       })();
       const rewritten = modelLabel ? `✅ 已开启新会话（模型：${modelLabel}）` : "✅ 已开启新会话。";
-      console.log(`[wecom-outbound] Rewrote command ack for agent session (len=${rewritten.length})`);
+      getAccountRuntime(agent.accountId)?.log.info?.(`[wecom-outbound] Rewrote command ack for agent session (len=${rewritten.length})`);
       outgoingText = rewritten;
     }
 
-    console.log(`[wecom-outbound] Sending text to target=${String(to ?? "")} (len=${outgoingText.length})`);
+    getAccountRuntime(agent.accountId)?.log.info?.(`[wecom-outbound] Sending text to target=${String(to ?? "")} (len=${outgoingText.length})`);
 
     let sentViaBotWs = false;
     try {
@@ -191,7 +191,7 @@ export const wecomOutbound: ChannelOutboundAdapter = {
         console.log(`[wecom-outbound] Successfully sent Agent text to ${String(to ?? "")}`);
       }
     } catch (err) {
-      console.error(`[wecom-outbound] Failed to send text to ${String(to ?? "")}:`, err);
+      getAccountRuntime(agent.accountId)?.log.error?.(`[wecom-outbound] Failed to send text to ${String(to ?? "")}: ${err instanceof Error ? err.message : String(err)}`);
       throw err;
     }
 
