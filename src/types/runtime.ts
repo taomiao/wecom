@@ -19,10 +19,7 @@ export type WecomInboundKind =
   | "image"
   | "file"
   | "voice"
-  | "video"
   | "mixed"
-  | "location"
-  | "link"
   | "event"
   | "welcome"
   | "template-card-event";

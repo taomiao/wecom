@@ -102,5 +102,3 @@ temp/
 # Project specific
 src/dynamic-agent.test.ts
 docs
-.openclaw
-package-lock.json

@@ -7,7 +7,6 @@ import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { handleWecomWebhookRequest } from "./src/monitor.js";
 import { setWecomRuntime } from "./src/runtime.js";
 import { wecomPlugin } from "./src/channel.js";
-import { registerWecomDocTools } from "./src/capability/doc/tool.js";
 
 const plugin = {
   id: "wecom",
@@ -34,9 +33,6 @@ const plugin = {
         match: "prefix",
       });
     }
-
-    // Register WeCom Doc Tools
-    registerWecomDocTools(api);
   },
 };
 

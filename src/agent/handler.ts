@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { OpenClawConfig, PluginRuntime } from "openclaw/plugin-sdk";
-import type { ResolvedAgentAccount, UnifiedInboundEvent, WecomInboundKind } from "../types/index.js";
+import type { ResolvedAgentAccount } from "../types/index.js";
 import {
     extractMsgType,
     extractFromUser,
@@ -22,7 +22,6 @@ import { downloadAgentApiMedia, sendAgentApiText } from "../transport/agent-api/
 import { getWecomRuntime } from "../runtime.js";
 import type { WecomAgentInboundMessage } from "../types/index.js";
 import type { TransportSessionPatch } from "../types/index.js";
-import type { WecomAccountRuntime } from "../app/account-runtime.js";
 import { buildWecomUnauthorizedCommandPrompt, resolveWecomCommandAuthorization } from "../shared/command-auth.js";
 import { resolveWecomMediaMaxBytes, shouldRejectWecomDefaultRoute } from "../config/index.js";
 import { buildAgentSessionTarget, generateAgentId, shouldUseDynamicAgent, ensureDynamicAgentListed } from "../dynamic-agent.js";
@@ -35,23 +34,6 @@ const ERROR_HELP = "\n\n遇到问题？联系作者: YanHaidao (微信: YanHaida
 // 注意：这是进程内内存去重，重启会清空；但足以覆盖企微的短周期重试。
 const RECENT_MSGID_TTL_MS = 10 * 60 * 1000;
 const recentAgentMsgIds = new Map<string, number>();
-
-// Event deduplication (e.g. for ENTER_AGENT/subscribe welcome messages)
-// We only want to send a welcome message once every 5 minutes per user
-const RECENT_EVENT_TTL_MS =3 * 60 * 1000;
-const recentAgentEvents = new Map<string, number>();
-
-function rememberAgentEvent(key: string): boolean {
-    const now = Date.now();
-    const existing = recentAgentEvents.get(key);
-    if (existing && now - existing < RECENT_EVENT_TTL_MS) return false;
-    recentAgentEvents.set(key, now);
-    // Prune expired
-    for (const [k, ts] of recentAgentEvents) {
-        if (now - ts >= RECENT_EVENT_TTL_MS) recentAgentEvents.delete(k);
-    }
-    return true;
-}
 
 function rememberAgentMsgId(msgId: string): boolean {
     const now = Date.now();
@@ -168,28 +150,6 @@ export function shouldProcessAgentInboundMessage(params: {
     const eventType = String(params.eventType ?? "").trim().toLowerCase();
 
     if (msgType === "event") {
-        const allowedEvents = [
-            "subscribe",
-            "enter_agent",
-            "batch_job_result",
-            // WeCom Doc events
-            "doc_create",
-            "doc_delete",
-            "doc_content_change",
-            "doc_member_change",
-            // WeCom Form events
-            "wedoc_collect_submit",
-            // SmartSheet events
-            "smartsheet_record_change",
-            "smartsheet_field_change",
-            "smartsheet_view_change"
-        ];
-        if (allowedEvents.includes(eventType) || eventType.startsWith("doc_") || eventType.startsWith("wedoc_") || eventType.startsWith("smartsheet_")) {
-            return {
-                shouldProcess: true,
-                reason: `allowed_event:${eventType}`,
-            };
-        }
         return {
             shouldProcess: false,
             reason: `event:${eventType || "unknown"}`,
@@ -281,7 +241,6 @@ async function handleMessageCallback(params: AgentWebhookParams): Promise<boolea
         const chatId = extractChatId(msg);
         const msgId = extractMsgId(msg);
         const eventType = String((msg as Record<string, unknown>).Event ?? "").trim().toLowerCase();
-
         if (msgId) {
             const ok = rememberAgentMsgId(msgId);
             if (!ok) {
@@ -297,19 +256,6 @@ async function handleMessageCallback(params: AgentWebhookParams): Promise<boolea
                         body: msg,
                     },
                 });
-                res.statusCode = 200;
-                res.setHeader("Content-Type", "text/plain; charset=utf-8");
-                res.end("success");
-                return true;
-            }
-        }
-
-        // 针对 ENTER_AGENT / subscribe 等事件进行去重（冷却时间）
-        if (msgType === "event" && (eventType === "enter_agent" || eventType === "subscribe")) {
-            const eventKey = `${fromUser}:${eventType}`;
-            const ok = rememberAgentEvent(eventKey);
-            if (!ok) {
-                log?.(`[wecom-agent] duplicate/cooldown eventKey=${eventKey} from=${fromUser}; skipped welcome`);
                 res.statusCode = 200;
                 res.setHeader("Content-Type", "text/plain; charset=utf-8");
                 res.end("success");
@@ -395,41 +341,11 @@ async function processAgentMessage(params: {
 
     const isGroup = Boolean(chatId);
     const peerId = isGroup ? chatId! : fromUser;
-    const eventType = String(msg.Event ?? "").trim().toLowerCase();
-
-    const resolveInboundKind = (): WecomInboundKind => {
-        if (msgType === "event") {
-            if (eventType === "subscribe" || eventType === "enter_agent") return "welcome";
-            return "event";
-        }
-        if (msgType === "image") return "image";
-        if (msgType === "voice") return "voice";
-        if (msgType === "video") return "video";
-        if (msgType === "file") return "file";
-        if (msgType === "location") return "location";
-        if (msgType === "link") return "link";
-        return "text";
-    };
-
-    const inboundKind = resolveInboundKind();
-    const resolveEventText = (): string => {
-        if (inboundKind === "welcome" && agent.config.welcomeText) {
-            return agent.config.welcomeText;
-        }
-        if (msgType === "event") {
-            return `[event:${eventType || "unknown"}]`;
-        }
-        return content;
-    };
-    
-    // BUG FIX: 真正调用 resolveEventText() 获取欢迎语或事件描述
-    const resolvedContent = resolveEventText();
-    let finalContent = resolvedContent;
-
     const mediaMaxBytes = resolveWecomMediaMaxBytes(config);
 
     // 处理媒体文件
-    const attachments: NonNullable<UnifiedInboundEvent["attachments"]> = [];
+    const attachments: any[] = []; // TODO: define specific type
+    let finalContent = content;
     let mediaPath: string | undefined;
     let mediaType: string | undefined;
 
@@ -453,9 +369,9 @@ async function processAgentMessage(params: {
                 const originalExt = path.extname(originalFileName).toLowerCase();
                 const normalizedContentType =
                     looksText && originalExt === ".md" ? "text/markdown" :
-                        looksText && (!contentType || contentType === "application/octet-stream")
-                            ? "text/plain; charset=utf-8"
-                            : contentType;
+                    looksText && (!contentType || contentType === "application/octet-stream")
+                        ? "text/plain; charset=utf-8"
+                        : contentType;
 
                 const ext = extMap[normalizedContentType] || (looksText ? "txt" : "bin");
                 const filename = `${mediaId}.${ext}`;
@@ -484,8 +400,8 @@ async function processAgentMessage(params: {
                 // 构建附件
                 attachments.push({
                     name: originalFileName,
-                    contentType: normalizedContentType,
-                    remoteUrl: pathToFileURL(saved.path).href, // 使用跨平台安全的文件 URL
+                    mimeType: normalizedContentType,
+                    url: pathToFileURL(saved.path).href, // 使用跨平台安全的文件 URL
                 });
 
                 // 更新文本提示
@@ -594,7 +510,7 @@ async function processAgentMessage(params: {
         route.agentId = targetAgentId;
         route.sessionKey = `agent:${targetAgentId}:wecom:${agent.accountId}:${isGroup ? "group" : "dm"}:${peerId}`;
         // 异步添加到 agents.list（不阻塞）
-        ensureDynamicAgentListed(targetAgentId, core).catch(() => { });
+        ensureDynamicAgentListed(targetAgentId, core).catch(() => {});
         log?.(`[wecom-agent] dynamic agent routing: ${targetAgentId}, sessionKey=${route.sessionKey}`);
     }
     // ===== 动态 Agent 路由注入结束 =====
@@ -686,110 +602,46 @@ const ctxPayload = core.channel.reply.finalizeInboundContext({
         },
     });
 
-    // 5秒无响应自动回复进度提示
-    let hasResponseSent = false;
-    const processingTimer = setTimeout(async () => {
-        if (hasResponseSent) return;
-        try {
-            await sendAgentApiText({ 
-                agent, 
-                toUser: fromUser, 
-                chatId: undefined, 
-                text: "正在处理中，请稍候..." 
-            });
-            log?.(`[wecom-agent] sent processing notification to ${fromUser}`);
-        } catch (err) {
-            error?.(`[wecom-agent] failed to send processing notification: ${String(err)}`);
-        }
-    }, 5000);
+    // 调度回复
+    await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+        ctx: ctxPayload,
+        cfg: config,
+        replyOptions: {
+            disableBlockStreaming: true,
+        },
+        dispatcherOptions: {
+            deliver: async (payload: { text?: string }, info: { kind: string }) => {
+                if (info.kind !== "final") {
+                    return;
+                }
+                const text = payload.text ?? "";
+                if (!text) return;
 
-    // 发送队列锁：确保所有 deliver 调用（以及内部的分片发送）严格串行执行
-    let messageSendQueue = Promise.resolve();
-
-    try {
-        // 调度回复
-        await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
-            ctx: ctxPayload,
-            cfg: config,
-            replyOptions: {
-                disableBlockStreaming: true,
+                try {
+                    // 统一策略：Agent 模式在群聊场景默认只私信触发者（避免 wr/wc chatId 86008）
+                    await sendAgentApiText({ agent, toUser: fromUser, chatId: undefined, text });
+                    touchTransportSession?.({ lastOutboundAt: Date.now(), running: true });
+                    log?.(`[wecom-agent] reply delivered (${info.kind}) to ${fromUser}`);
+                } catch (err: unknown) {
+                    const message = err instanceof Error ? `${err.message}${err.cause ? ` (cause: ${String(err.cause)})` : ""}` : String(err);
+                    error?.(`[wecom-agent] reply failed: ${message}`);
+                    auditSink?.({
+                        transport: "agent-callback",
+                        category: "fallback-delivery-failed",
+                        summary: `agent callback reply failed user=${fromUser} kind=${info.kind}`,
+                        raw: {
+                            transport: "agent-callback",
+                            envelopeType: "xml",
+                            body: msg,
+                        },
+                        error: message,
+                    });
+                }            },
+            onError: (err: unknown, info: { kind: string }) => {
+                error?.(`[wecom-agent] ${info.kind} reply error: ${String(err)}`);
             },
-            dispatcherOptions: {
-                deliver: async (payload: { text?: string }, info: { kind: string }) => {
-                    const text = payload.text ?? "";
-                    // 忽略空文本消息
-                    if (!text || !text.trim()) {
-                        return;
-                    }
-
-                    // 标记已有回复，清除/失效定时器
-                    hasResponseSent = true;
-                    clearTimeout(processingTimer);
-
-                    // 将本次发送任务加入队列
-                    // 即使 deliver 被并发调用，队列中的任务也会按入队顺序串行执行
-                    const currentTask = async () => {
-                        const MAX_CHUNK_SIZE = 600;
-                        // 确保分片顺序发送
-                        for (let i = 0; i < text.length; i += MAX_CHUNK_SIZE) {
-                            const chunk = text.slice(i, i + MAX_CHUNK_SIZE);
-                            
-                            try {
-                                await sendAgentApiText({ agent, toUser: fromUser, chatId: undefined, text: chunk });
-                                touchTransportSession?.({ lastOutboundAt: Date.now(), running: true });
-                                log?.(`[wecom-agent] reply chunk delivered (${info.kind}) to ${fromUser}, len=${chunk.length}`);
-                                
-                                // 强制延时：确保企业微信有足够时间处理顺序
-                                if (i + MAX_CHUNK_SIZE < text.length) {
-                                    await new Promise(resolve => setTimeout(resolve, 200));
-                                }
-                            } catch (err: unknown) {
-                                const message = err instanceof Error ? `${err.message}${err.cause ? ` (cause: ${String(err.cause)})` : ""}` : String(err);
-                                error?.(`[wecom-agent] reply failed: ${message}`);
-                                auditSink?.({
-                                    transport: "agent-callback",
-                                    category: "fallback-delivery-failed",
-                                    summary: `agent callback reply failed user=${fromUser} kind=${info.kind}`,
-                                    raw: {
-                                        transport: "agent-callback",
-                                        envelopeType: "xml",
-                                        body: msg,
-                                    },
-                                    error: message,
-                                });
-                            }
-                        }
-                        
-                        // 不同 Block 之间也增加一点间隔
-                        if (info.kind !== "final") {
-                            await new Promise(resolve => setTimeout(resolve, 200));
-                        }
-                    };
-
-                    // 更新队列链
-                    // 使用 then 链接，并捕获前一个任务可能的错误，确保当前任务总能执行
-                    messageSendQueue = messageSendQueue
-                        .then(() => currentTask())
-                        .catch((err) => {
-                            error?.(`[wecom-agent] previous send task failed: ${String(err)}`);
-                            // 前一个失败不应阻止当前任务，继续尝试执行当前任务
-                            return currentTask();
-                        });
-
-                    // 等待当前任务完成（保持背压，虽然对于 http callback 模式这可能只是延迟了整体结束时间）
-                    await messageSendQueue;
-                },
-                onError: (err: unknown, info: { kind: string }) => {
-                    clearTimeout(processingTimer);
-                    error?.(`[wecom-agent] ${info.kind} reply error: ${String(err)}`);
-                },
-            }
-        });
-    } finally {
-        clearTimeout(processingTimer);
-        // 确保所有排队的消息都发完了才退出（虽然对于 HTTP 响应来说，res.end 早就调用了）
-        await messageSendQueue;
-    }
+        }
+    });
 }
 
 /**

@@ -65,7 +65,7 @@ export const wecomPlugin: ChannelPlugin<ResolvedWecomAccount> = {
     threads: false,
     polls: false,
     nativeCommands: false,
-    blockStreaming: false,
+    blockStreaming: true,
   },
   reload: { configPrefixes: ["channels.wecom"] },
   // NOTE: We intentionally avoid Zod -> JSON Schema conversion at plugin-load time.

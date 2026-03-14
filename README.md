@@ -14,10 +14,6 @@
 </p>
 
 <p align="center">
-  <strong>🚀 企业微信文档/表格系统无缝打通 [2.3.11-zh 新增]</strong>
-</p>
-
-<p align="center">
   <a href="#sec-1">💡 核心价值</a> •
   <a href="#sec-2">📊 模式对比</a> •
   <a href="#sec-changelog">📋 最近更新</a> •
@@ -73,11 +69,6 @@
 #### 📎 **全模态支持 (Multi-Modal)**
 *   **发什么都能看**：支持接收图片、文件 (PDF/Doc/Zip)、语音 (自动转文字)、视频。
 *   **要什么都能给**：AI 生成的图表、代码文件、语音回复，均可自动上传并推送到企微。
-
-#### 📝 **企业微信文档/表格系统无缝打通 [2.3.11-zh 新增]**
-*   **全能 CRUD**：支持对“企业微信在线文档”、“在线表格”、“收集表”进行全套查询与创建/修改操作。
-*   **权限管理**：大模型直接为您查询/诊断分享链接为何打不开，并根据指令直接添加协作者和变更安全设置。
-*   **动态数据联动**：实现收集表的智能下发和数据回收分析，并支持智能表格的数据级录入。
 
 #### 📢 **企业级触达 (Enterprise Reach)**
 *   **精准广播**：支持向 **部门 (Party)**、**标签 (Tag)** 或 **外部群** 批量推送消息。
@@ -499,116 +490,6 @@ openclaw channels status --deep
 <a id="sec-9"></a>
 
 ## 七、📮 联系我 与 版本协议
-
-### 最近更新
-
-近期保持高频迭代，最近版本如下：
-
-#### v2.3.12-zh（2026-03-13）by proyy
-
-> 本版本 WeCom Doc 功能增强来自 [proyy/wecom](https://github.com/proyy/wecom)。
-
-**WeCom Doc 功能模块详细核验报告：**
-
-### 📊 功能实现状态总览
-
-| 功能模块 | 状态 | 说明 |
-| :--- | :--- | :--- |
-| **管理文档** | ✅ 已实现 | 新建/删除/重命名/信息获取/分享均已就绪 |
-| **管理文档内容** | ✅ 已实现 | 文档内容读写、表格行列操作均已支持 |
-| **智能表格** | ✅ 已实现 | 子表/视图/字段/记录/编组的全生命周期管理 |
-| **设置文档权限** | ✅ 已实现 | 成员权限、安全设置、查看规则均已覆盖 |
-| **管理收集表** | ✅ 已实现 | 创建/编辑/统计/答案读取均已实现 |
-| **高级账号管理** | ✅ 已实现 | 分配/取消/列表查询均已实现 |
-| **素材管理** | ✅ 已实现 | 支持上传图片到文档专用素材库 |
-| **回调通知** | ❌ **未实现** | **当前系统会丢弃文档相关回调事件** |
-| **接收外部数据** | ✅ 已实现 | 已支持向智能表格添加/更新外部记录 |
-
-### 📝 逐项详细确认
-
-#### 1. 管理文档
-*   **新建文档**: `createDoc` (支持文档、表格、智能表格)
-*   **重命名文档**: `renameDoc`
-*   **删除文档**: `deleteDoc`
-*   **获取文档基础信息**: `getDocBaseInfo`
-*   **分享文档**: `shareDoc`
-
-#### 2. 管理文档内容
-*   **编辑文档内容**: `updateDocContent`
-*   **获取文档数据**: `getDocContent`
-*   **管理表格内容**: `modifySheetProperties`
-*   **编辑表格内容**: `editSheetData`
-*   **获取表格行列信息**: `getSheetProperties`
-*   **获取表格数据**: `getSheetData`
-
-#### 3. 管理智能表格内容
-*   **添加/删除/更新/查询子表**: `smartTableAddSheet`, `smartTableDeleteSheet` 等
-*   **添加/删除/更新/查询视图**: `smartTableAddView`, `smartTableView` 等
-*   **添加/删除/更新/查询字段**: `smartTableAddField`, `smartTableUpdateField` 等
-*   **添加/删除/更新/查询记录**: `smartTableAddRecords`, `smartTableGetRecords` 等
-*   **添加/删除/更新/获取编组**: 已通过 `smartTableUpdateGrouping` 等接口实现
-
-#### 4. 设置文档权限
-*   **获取文档权限信息**: `getDocAuth`
-*   **修改文档查看规则**: `setDocJoinRule`
-*   **修改文档通知范围及权限**: `modDocMemberNotifiedScope`, `setDocMemberAuth`
-*   **修改文档安全设置**: `setDocSafetySetting`, `modDocSecuritySetting`
-*   **管理智能表格内容权限**: 已包含在上述权限接口中 (支持对子表粒度控制)
-
-#### 5. 管理收集表
-*   **创建/编辑收集表**: `createCollect`, `modifyCollect`
-*   **获取收集表信息**: `getFormInfo`
-*   **收集表的统计信息查询**: `getFormStatistic`
-*   **读取收集表答案**: `getFormAnswer`
-
-#### 6. 回调通知 (⚠️ 缺失)
-*   修改文档成员事件
-*   删除文档事件
-*   收集表完成事件
-*   删除收集表事件
-*   修改收集表设置事件
-*   字段变更事件
-*   记录变更事件
-
-**原因诊断**: 在 `src/agent/handler.ts` 的 `shouldProcessAgentInboundMessage` 函数中，系统目前**显式过滤**了除 `subscribe`, `enter_agent`, `batch_job_result` 之外的所有事件。文档变更事件（如 `update_doc`, `doc_create` 等）会被视为 `unknown event` 而直接丢弃。
-
-#### 7. 接收外部数据到智能表格
-*   **概述/添加记录**: `smartTableAddExternalRecords`
-*   **更新记录**: `smartTableUpdateExternalRecords`
-
-#### 8. 高级功能账号管理 & 素材管理
-*   **账号管理**: `assignDocAdvancedAccount`, `cancelDocAdvancedAccount`, `getDocAdvancedAccountList`
-*   **上传文档图片**: `uploadDocImage`
-
-#### v2.3.11-zh（2026-03-12）by proyy
-
-- 全面增加企业微信 WeCom Doc 工具链：文档/表格/智能表格/收集表，以及全面的 CRUD 支持。
-- 增加文档权限与协作者管理 API。
-- 针对分享链接可用性诊断并修复底层返回带下划线 URL 被 markdown 行内截断导致打不开的问题。
-- 针对长文本分段问题进行的 BUG 修复与升级。
-
-#### v2.3.11（2026-03-11）
-
-- `Bot WS` 升级为即时占位 + 持续保活，降低长思考时的 `invalid req_id`。
-- `streamPlaceholderContent` 统一作用于 `Bot WS` 与 `Bot Webhook`。
-- onboarding 在空配置下也会提供 `default` 账号选项。
-- README 补充多账号共用静态 Agent 时的 session 隔离建议。
-
-#### v2.3.10（2026-03-10）
-
-- onboarding 默认收敛为 `Bot + WS + 开放私聊`。
-- 修复 `Bot WS` 长文本双重回复问题。
-- 修复首个自定义接入标识时报 `default not found`。
-- Agent 新配置统一使用 `agentSecret`。
-
-#### v2.3.9（2026-03-09）
-
-- Bot 默认接入改为 `WebSocket`，无需域名更易上手。
-- 完善中文 onboarding，减少重复提示。
-- 恢复 `Bot WS` 流式输出能力。
-- 增强 Agent 回调与发送日志，排障更直接。
-
-详细版本记录见 `changelog/v2.3.11.md`、`changelog/v2.3.10.md` 与 `changelog/v2.3.9.md`。
 
 微信交流群（扫码入群）：
 

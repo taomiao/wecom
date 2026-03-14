@@ -30,7 +30,7 @@ export class WecomAccountRuntime {
     readonly core: PluginRuntime,
     readonly cfg: OpenClawConfig,
     readonly resolved: ResolvedRuntimeAccount,
-    readonly log: {
+    private readonly log: {
       info?: (message: string) => void;
       warn?: (message: string) => void;
       error?: (message: string) => void;

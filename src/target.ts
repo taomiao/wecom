@@ -85,9 +85,6 @@ export function resolveWecomTarget(raw: string | undefined, options?: { preferUs
     }
 
     // Default to User (默认为用户)
-    // 注意：纯数字通常可能是 UserID (内部成员 ID)，也可能是 PartyID。
-    // 为了兼容性，如果没有前缀且不匹配群聊规则，我们将其视为 UserID。
-    // 如果需要明确发送给部门，请使用 "party:1" 前缀。
     return { touser: clean };
 }
 

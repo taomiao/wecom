@@ -15,10 +15,7 @@ export async function useActiveReplyOnce(
   streamId: string,
   fn: (params: { responseUrl: string; proxyUrl?: string }) => Promise<void>,
 ): Promise<void> {
-  return activeReplyStore.use(streamId, async (params) => {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    await fn(params);
-  });
+  return activeReplyStore.use(streamId, fn);
 }
 
 export async function sendActiveMessage(streamId: string, content: string): Promise<void> {
