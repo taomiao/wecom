@@ -757,8 +757,8 @@ export class WecomDocClient {
         };
     }
 
-    async updateDocContent(params: { agent: ResolvedAgentAccount; docId: string; requests: UpdateRequest[]; version?: number }) {
-        const { agent, docId, requests, version } = params;
+    async updateDocContent(params: { agent: ResolvedAgentAccount; docId: string; requests: UpdateRequest[]; version?: number; batchMode?: boolean }) {
+        const { agent, docId, requests, version, batchMode } = params;
         
         // Validate requests structure basic check
         const requestList = readArray(requests);
