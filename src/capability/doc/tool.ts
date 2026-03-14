@@ -346,7 +346,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                 const action = params.action;
                 switch (action) {
                     case "create": {
-                        const collaborators = resolveCreateCollaborators({ toolContext, requestParams: params });
+                        const explicitCollaborators = Array.isArray(params.collaborators) ? [...params.collaborators] : [];
                         const result = await docClient.createDoc({
                             agent: account,
                             docName: params.docName,
@@ -370,6 +370,27 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                             });
                         } catch (err) {
                             // Non-fatal: document created, just default permissions may be read-only
+                        }
+
+                        // Grant permissions AFTER setting security rules
+                        // This ensures the requester and explicit collaborators get proper access
+                        // Use grantDocAccess which auto-detects and removes viewers when promoting to collaborators
+                        const collaboratorsToGrant = explicitCollaborators.length > 0
+                            ? explicitCollaborators
+                            : [readString(toolContext?.senderId || toolContext?.requesterSenderId)].filter(Boolean);
+                        
+                        let accessResult: any = null;
+                        if (collaboratorsToGrant.length > 0) {
+                            try {
+                                accessResult = await docClient.grantDocAccess({
+                                    agent: account,
+                                    docId: result.docId,
+                                    collaborators: collaboratorsToGrant,
+                                    authLevel: 2, // Edit permission
+                                });
+                            } catch (err) {
+                                // Non-fatal: document created, just permissions may need manual adjustment
+                            }
                         }
 
                         // Handle initial content (title/body separation) if provided
