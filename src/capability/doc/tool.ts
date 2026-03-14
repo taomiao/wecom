@@ -832,9 +832,6 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                         });
                     }
                     case "update_content": {
-                        // 支持两种模式：
-                        // 1. batchMode=false（默认）：逐个执行，自动获取最新版本，可靠性高
-                        // 2. batchMode=true：批量执行，需要确保索引计算正确，性能更好
                         const batchMode = params.batchMode === true;
                         
                         const result = await docClient.updateDocContent({
@@ -845,20 +842,12 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                             batchMode: batchMode,
                         });
                         
-                        const modeLabel = batchMode ? '批量模式' : '顺序模式';
-                        const successCount = result.successCount || (result.batchMode ? params.requests?.length : 1);
-                        
                         return buildToolResult({
                             ok: true,
                             action: "update_content",
                             accountId: account.accountId,
                             docId: params.docId,
-                            summary: `文档内容已更新（${modeLabel}，成功 ${successCount}/${params.requests?.length || 1} 个操作）`,
-                            details: result.executedCount ? { 
-                                executedCount: result.executedCount, 
-                                successCount: result.successCount,
-                                batchMode: result.batchMode 
-                            } : undefined,
+                            summary: `文档内容已更新（${batchMode ? '批量' : '顺序'}模式）`,
                             raw: result.raw,
                         });
                     }
