@@ -400,6 +400,26 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                     return String(item);
                                 };
 
+                                // Helper: download image and convert to base64
+                                const downloadImageAsBase64 = async (url: string): Promise<string> => {
+                                    const response = await fetch(url);
+                                    if (!response.ok) {
+                                        throw new Error(`Failed to download image: ${url}`);
+                                    }
+                                    const blob = await response.blob();
+                                    return new Promise((resolve, reject) => {
+                                        const reader = new FileReader();
+                                        reader.onloadend = () => {
+                                            const result = reader.result as string;
+                                            // Remove data:image/png;base64, prefix
+                                            const parts = result.split(',');
+                                            resolve(parts[1] || parts[0]);
+                                        };
+                                        reader.onerror = reject;
+                                        reader.readAsDataURL(blob);
+                                    });
+                                };
+
                                 // Helper: get text from content item
                                 const getText = (item: any): string => {
                                     if (typeof item === "object" && item !== null) {
@@ -412,18 +432,35 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                 if (params.init_content[0]) {
                                     const firstItem = params.init_content[0];
                                     if (isImageItem(firstItem)) {
-                                        // First item is image - insert at index 0 directly
+                                        // First item is image - upload first, then insert at index 0
                                         const imgUrl = getImageUrl(firstItem);
-                                        await docClient.updateDocContent({
-                                            agent: account,
-                                            docId: result.docId,
-                                            requests: [{
-                                                insert_image: {
-                                                    image_id: imgUrl,
-                                                    location: { index: 0 }
-                                                }
-                                            }]
-                                        });
+                                        
+                                        try {
+                                            // Upload image to WeCom to get proper image_id
+                                            const base64 = await downloadImageAsBase64(imgUrl);
+                                            const uploadResult = await docClient.uploadDocImage({
+                                                agent: account,
+                                                docId: result.docId,
+                                                base64_content: base64,
+                                            });
+                                            
+                                            // Insert image using uploaded URL
+                                            await docClient.updateDocContent({
+                                                agent: account,
+                                                docId: result.docId,
+                                                requests: [{
+                                                    insert_image: {
+                                                        image_id: uploadResult.url,  // ✅ Use uploaded URL
+                                                        location: { index: 0 },
+                                                        width: uploadResult.width,
+                                                        height: uploadResult.height
+                                                    }
+                                                }]
+                                            });
+                                        } catch (uploadErr) {
+                                            console.error(`Failed to upload first image ${imgUrl}:`, uploadErr);
+                                            throw new Error(`First image upload failed: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`);
+                                        }
                                     } else {
                                         const titleText = getText(firstItem);
                                         await docClient.updateDocContent({
@@ -467,25 +504,45 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                     const docEndIndex = currentContent.document.end;
                                     
                                     if (isImageItem(item)) {
-                                        // Insert image: first create a new paragraph, then insert image at paragraph start
-                                        // Image must be inserted inside a paragraph, not at document level
-                                        await docClient.updateDocContent({
-                                            agent: account,
-                                            docId: result.docId,
-                                            requests: [
-                                                {
-                                                    insert_paragraph: {
-                                                        location: { index: docEndIndex }
+                                        // Insert image: first upload image to get image_id, then insert
+                                        // Official API requires: upload first, then use returned URL as image_id
+                                        const imgUrl = getImageUrl(item);
+                                        
+                                        try {
+                                            // Step 1: Download and upload image to WeCom
+                                            const base64 = await downloadImageAsBase64(imgUrl);
+                                            const uploadResult = await docClient.uploadDocImage({
+                                                agent: account,
+                                                docId: result.docId,
+                                                base64_content: base64,
+                                            });
+                                            
+                                            // Step 2: Insert image using the uploaded URL
+                                            // Image must be inserted inside a paragraph, not at document level
+                                            await docClient.updateDocContent({
+                                                agent: account,
+                                                docId: result.docId,
+                                                requests: [
+                                                    {
+                                                        insert_paragraph: {
+                                                            location: { index: docEndIndex }
+                                                        }
+                                                    },
+                                                    {
+                                                        insert_image: {
+                                                            image_id: uploadResult.url,  // ✅ Use uploaded URL
+                                                            location: { index: docEndIndex },
+                                                            width: uploadResult.width,
+                                                            height: uploadResult.height
+                                                        }
                                                     }
-                                                },
-                                                {
-                                                    insert_image: {
-                                                        image_id: getImageUrl(item),
-                                                        location: { index: docEndIndex }
-                                                    }
-                                                }
-                                            ]
-                                        });
+                                                ]
+                                            });
+                                        } catch (uploadErr) {
+                                            // If upload fails, log error but continue with other content
+                                            console.error(`Failed to upload image ${imgUrl}:`, uploadErr);
+                                            throw new Error(`Image upload failed: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`);
+                                        }
                                     } else {
                                         const text = getText(item);
                                         if (!text) continue;
@@ -517,13 +574,13 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                         }
 
                         let accessResult: any = null;
-                        if ((Array.isArray(params.viewers) && params.viewers.length > 0) || collaborators.length > 0) {
+                        if ((Array.isArray(params.viewers) && params.viewers.length > 0) || explicitCollaborators.length > 0) {
                             try {
                                 accessResult = await docClient.grantDocAccess({
                                     agent: account,
                                     docId: result.docId,
                                     viewers: params.viewers,
-                                    collaborators,
+                                    collaborators: explicitCollaborators,
                                 });
                             } catch (err) {
                                 return buildToolResult({
