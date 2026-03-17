@@ -723,16 +723,62 @@
   "parameters": {
     "docId": "文档 ID",
     "sheetId": "子表 ID",
+    "key_type": "可选：CELL_VALUE_KEY_TYPE_FIELD_TITLE(默认)|CELL_VALUE_KEY_TYPE_FIELD_ID",
     "records": [
       {
         "values": {
-          "字段标题或字段 ID": [
-            { "type": "text", "text": "文本内容" }
-          ]
+          "字段标题": [
+            { "type": "text", "text": "文本内容" },
+            { "type": "url", "text": "链接文本", "link": "https://..." }
+          ],
+          "数字字段": [123],
+          "日期字段": ["1715846245084"],
+          "单选字段": [{"id": "1", "text": "选项 1"}],
+          "多选字段": [{"id": "1", "text": "选项 1"}, {"id": "2", "text": "选项 2"}],
+          "成员字段": [{"user_id": "zhangsan"}],
+          "复选框": [true],
+          "进度": [0.75],
+          "货币": [100.50],
+          "百分数": [0.85],
+          "条码": ["6901234567890"],
+          "地理位置": [{"id": "xxx", "latitude": "23.1", "longitude": "113.3", "title": "广州塔"}]
         }
       }
     ]
-  }
+  },
+  "examples": {
+    "简单文本记录": {
+      "docId": "DOC123",
+      "sheetId": "SHEET456",
+      "records": [{
+        "values": {
+          "姓名": [{"type": "text", "text": "张三"}],
+          "部门": [{"type": "text", "text": "技术部"}],
+          "备注": [{"type": "text", "text": "新员工"}]
+        }
+      }]
+    },
+    "混合类型记录": {
+      "docId": "DOC123",
+      "sheetId": "SHEET456",
+      "records": [{
+        "values": {
+          "姓名": [{"type": "text", "text": "李四"}],
+          "年龄": [28],
+          "入职日期": ["1715846245084"],
+          "绩效": [0.9],
+          "是否转正": [true]
+        }
+      }]
+    }
+  },
+  "notes": [
+    "values 的 key 必须是已存在的字段标题或字段 ID（取决于 key_type）",
+    "不同字段类型需要不同的值格式，见上方参数说明",
+    "文本类型必须使用 {type: 'text', text: '内容'} 格式",
+    "数字/日期/货币等直接传值，不需要包装",
+    "选项类型需要包含 id 和 text"
+  ]
 }
 ```
 

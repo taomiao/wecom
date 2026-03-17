@@ -511,9 +511,10 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                             });
 
                                             // Step 2: Create new paragraph and insert image in one batch (2 operations ≤ 30)
-                                            // Per API spec: all indices are based on the same document snapshot
+                                            // Per API spec (doc.txt line 612): all operations use the SAME document snapshot
                                             // insert_paragraph at docEndIndex creates a new paragraph
-                                            // insert_image at docEndIndex + 1 inserts into the newly created paragraph
+                                            // insert_image at docEndIndex inserts into the newly created paragraph
+                                            // Both indices are relative to the SAME snapshot before any operations
                                             await docClient.updateDocContent({
                                                 agent: account,
                                                 docId: result.docId,
@@ -527,7 +528,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                                     {
                                                         insert_image: {
                                                             image_id: uploadResult.url,
-                                                            location: { index: docEndIndex + 1 },
+                                                            location: { index: docEndIndex },  // Same index as paragraph - inserts into the new paragraph
                                                             width: uploadResult.width,
                                                             height: uploadResult.height
                                                         }
@@ -543,9 +544,10 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                         if (!text) continue;
 
                                         // Insert text: create paragraph and insert text in one batch (2 operations ≤ 30)
-                                        // Per API spec: all indices are based on the same document snapshot
+                                        // Per API spec (doc.txt line 612): all operations use the SAME document snapshot
                                         // insert_paragraph at docEndIndex creates a new paragraph
-                                        // insert_text at docEndIndex + 1 inserts into the newly created paragraph
+                                        // insert_text at docEndIndex inserts text INTO the newly created paragraph
+                                        // Both indices are relative to the SAME snapshot before any operations
                                         await docClient.updateDocContent({
                                             agent: account,
                                             docId: result.docId,
@@ -559,7 +561,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                                 {
                                                     insert_text: {
                                                         text: text,
-                                                        location: { index: docEndIndex + 1 }
+                                                        location: { index: docEndIndex }  // Same index as paragraph - inserts into the new paragraph
                                                     }
                                                 }
                                             ]
