@@ -420,7 +420,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                     return String(item);
                                 };
 
-                                // Step 1: Insert first paragraph (title) at index 0
+                                // Step 1: Insert first item (title) at index 0
                                 if (params.init_content[0]) {
                                     const firstItem = params.init_content[0];
                                     console.log(`[wecom-doc] Processing title: ${isImageItem(firstItem) ? 'image' : 'text'}`);
@@ -438,7 +438,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                                 base64_content: base64,
                                             });
 
-                                            // Insert image at index 0
+                                            // Insert image at index 0 (single operation per API spec)
                                             const insertResult = await docClient.updateDocContent({
                                                 agent: account,
                                                 docId: result.docId,
@@ -463,7 +463,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                         const titleText = getText(firstItem);
                                         console.log(`[wecom-doc] Title text: "${titleText.substring(0, 50)}..." (${titleText.length} chars)`);
                                         
-                                        // Insert title text at index 0
+                                        // Insert title text at index 0 (single operation per API spec)
                                         const insertResult = await docClient.updateDocContent({
                                             agent: account,
                                             docId: result.docId,
@@ -479,7 +479,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                         }
                                         console.log(`[wecom-doc] Title text inserted successfully`);
 
-                                        // Apply Title Styling (Bold) - separate operation
+                                        // Apply Title Styling (Bold) - separate operation per API spec
                                         if (titleText.length > 0) {
                                             const styleResult = await docClient.updateDocContent({
                                                 agent: account,
@@ -500,25 +500,21 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                     }
                                 }
 
-                                // Step 2: For subsequent items, append one by one with proper index refresh
-                                // CRITICAL: Each insert changes the document structure, so we must:
-                                // 1. Get latest content before EACH insert
-                                // 2. Use the END index of the latest content
-                                // 3. Execute ONE insert operation per batch
-                                // 4. Wait for each operation to complete before next
+                                // Step 2: For subsequent items, insert one by one
+                                // Per API spec (doc.txt line 673): Each UpdateRequest object can only contain ONE field
+                                // Do NOT mix insert_paragraph and insert_text in same batch
                                 console.log(`[wecom-doc] Processing ${params.init_content.length - 1} body items`);
                                 for (let i = 1; i < params.init_content.length; i++) {
                                     const item = params.init_content[i];
                                     console.log(`[wecom-doc] Processing item ${i}: ${isImageItem(item) ? 'image' : 'text'}`);
 
-                                    // CRITICAL: Refresh content to get latest document structure
-                                    // API requires: must use latest index for each insert
+                                    // Get latest content to get current end index
+                                    // Per API spec (doc.txt line 616): must get latest index before each insert
                                     const currentContent = await docClient.getDocContent({
                                         agent: account,
                                         docId: result.docId,
                                     });
 
-                                    // Get the end index of the document
                                     const docEndIndex = currentContent.document.end;
                                     const currentVersion = currentContent.version;
                                     console.log(`[wecom-doc] Current doc end index: ${docEndIndex}, version: ${currentVersion}`);
@@ -550,7 +546,6 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                                     }
                                                 }]
                                             });
-                                            // Verify insertion succeeded
                                             if (!insertResult.raw || insertResult.raw.errcode !== 0) {
                                                 throw new Error(`Insert image failed: ${JSON.stringify(insertResult.raw)}`);
                                             }
@@ -567,21 +562,20 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                         }
                                         console.log(`[wecom-doc] Item ${i} text: "${text.substring(0, 50)}..." (${text.length} chars)`);
 
-                                        // Insert text at end index (single operation)
-                                        // Each insert_text creates its own text node
+                                        // Insert text at end index (single operation per API spec)
+                                        // DO NOT combine with insert_paragraph in same batch
                                         const insertResult = await docClient.updateDocContent({
                                             agent: account,
                                             docId: result.docId,
                                             version: currentVersion,
                                             requests: [{
                                                 insert_text: {
-                                                    text: text,  // Insert text as-is
+                                                    text: text,
                                                     location: { index: docEndIndex }
                                                 }
                                             }]
                                         });
                                         
-                                        // Verify insertion succeeded
                                         if (!insertResult.raw || insertResult.raw.errcode !== 0) {
                                             throw new Error(`Insert text failed at index ${i}: ${JSON.stringify(insertResult.raw)}`);
                                         }
