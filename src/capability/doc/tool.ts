@@ -377,6 +377,8 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                         let contentResult: any = null;
                         if (Array.isArray(params.init_content) && params.init_content.length > 0) {
                             try {
+                                console.log(`[wecom-doc] init_content processing: ${params.init_content.length} items`);
+                                
                                 // Helper: check if content item is an image
                                 const isImageItem = (item: any): boolean => {
                                     if (typeof item === "object" && item !== null) {
@@ -421,6 +423,8 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                 // Step 1: Insert first paragraph (title) at index 0
                                 if (params.init_content[0]) {
                                     const firstItem = params.init_content[0];
+                                    console.log(`[wecom-doc] Processing title: ${isImageItem(firstItem) ? 'image' : 'text'}`);
+                                    
                                     if (isImageItem(firstItem)) {
                                         // First item is image - upload first, then insert at index 0
                                         const imgUrl = getImageUrl(firstItem);
@@ -435,7 +439,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                             });
 
                                             // Insert image at index 0
-                                            await docClient.updateDocContent({
+                                            const insertResult = await docClient.updateDocContent({
                                                 agent: account,
                                                 docId: result.docId,
                                                 requests: [{
@@ -447,15 +451,20 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                                     }
                                                 }]
                                             });
+                                            if (!insertResult.raw || insertResult.raw.errcode !== 0) {
+                                                throw new Error(`Insert first image failed: ${JSON.stringify(insertResult.raw)}`);
+                                            }
+                                            console.log(`[wecom-doc] Title image inserted successfully`);
                                         } catch (uploadErr) {
                                             console.error(`[wecom-doc] upload_image_failed: docId=${result.docId.substring(0, 8)}... url=${imgUrl.substring(0, 50)}...`, uploadErr instanceof Error ? uploadErr.message : String(uploadErr));
                                             throw new Error(`First image upload failed: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`);
                                         }
                                     } else {
                                         const titleText = getText(firstItem);
+                                        console.log(`[wecom-doc] Title text: "${titleText.substring(0, 50)}..." (${titleText.length} chars)`);
                                         
                                         // Insert title text at index 0
-                                        await docClient.updateDocContent({
+                                        const insertResult = await docClient.updateDocContent({
                                             agent: account,
                                             docId: result.docId,
                                             requests: [{
@@ -465,10 +474,14 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                                 }
                                             }]
                                         });
+                                        if (!insertResult.raw || insertResult.raw.errcode !== 0) {
+                                            throw new Error(`Insert title failed: ${JSON.stringify(insertResult.raw)}`);
+                                        }
+                                        console.log(`[wecom-doc] Title text inserted successfully`);
 
                                         // Apply Title Styling (Bold) - separate operation
                                         if (titleText.length > 0) {
-                                            await docClient.updateDocContent({
+                                            const styleResult = await docClient.updateDocContent({
                                                 agent: account,
                                                 docId: result.docId,
                                                 requests: [{
@@ -478,6 +491,11 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                                     }
                                                 }]
                                             });
+                                            if (!styleResult.raw || styleResult.raw.errcode !== 0) {
+                                                console.warn(`[wecom-doc] Failed to apply bold style: ${JSON.stringify(styleResult.raw)}`);
+                                            } else {
+                                                console.log(`[wecom-doc] Title bold style applied successfully`);
+                                            }
                                         }
                                     }
                                 }
@@ -487,9 +505,11 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                 // 1. Get latest content before EACH insert
                                 // 2. Use the END index of the latest content
                                 // 3. Execute ONE insert operation per batch
-                                // 4. Repeat for next item
+                                // 4. Wait for each operation to complete before next
+                                console.log(`[wecom-doc] Processing ${params.init_content.length - 1} body items`);
                                 for (let i = 1; i < params.init_content.length; i++) {
                                     const item = params.init_content[i];
+                                    console.log(`[wecom-doc] Processing item ${i}: ${isImageItem(item) ? 'image' : 'text'}`);
 
                                     // CRITICAL: Refresh content to get latest document structure
                                     // API requires: must use latest index for each insert
@@ -501,6 +521,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                     // Get the end index of the document
                                     const docEndIndex = currentContent.document.end;
                                     const currentVersion = currentContent.version;
+                                    console.log(`[wecom-doc] Current doc end index: ${docEndIndex}, version: ${currentVersion}`);
 
                                     if (isImageItem(item)) {
                                         // Insert image
@@ -516,7 +537,7 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                             });
 
                                             // Insert image at end index (single operation)
-                                            await docClient.updateDocContent({
+                                            const insertResult = await docClient.updateDocContent({
                                                 agent: account,
                                                 docId: result.docId,
                                                 version: currentVersion,
@@ -529,18 +550,26 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                                     }
                                                 }]
                                             });
+                                            // Verify insertion succeeded
+                                            if (!insertResult.raw || insertResult.raw.errcode !== 0) {
+                                                throw new Error(`Insert image failed: ${JSON.stringify(insertResult.raw)}`);
+                                            }
+                                            console.log(`[wecom-doc] Item ${i} image inserted successfully`);
                                         } catch (uploadErr) {
                                             console.error(`[wecom-doc] upload_image_failed: docId=${result.docId.substring(0, 8)}... url=${imgUrl.substring(0, 50)}...`, uploadErr instanceof Error ? uploadErr.message : String(uploadErr));
                                             throw new Error(`Image upload failed: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`);
                                         }
                                     } else {
                                         const text = getText(item);
-                                        if (!text) continue;
+                                        if (!text) {
+                                            console.warn(`[wecom-doc] Item ${i} has empty text, skipping`);
+                                            continue;
+                                        }
+                                        console.log(`[wecom-doc] Item ${i} text: "${text.substring(0, 50)}..." (${text.length} chars)`);
 
                                         // Insert text at end index (single operation)
                                         // Each insert_text creates its own text node
-                                        // No need to add newline - each text item is a separate paragraph
-                                        await docClient.updateDocContent({
+                                        const insertResult = await docClient.updateDocContent({
                                             agent: account,
                                             docId: result.docId,
                                             version: currentVersion,
@@ -551,6 +580,12 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                                                 }
                                             }]
                                         });
+                                        
+                                        // Verify insertion succeeded
+                                        if (!insertResult.raw || insertResult.raw.errcode !== 0) {
+                                            throw new Error(`Insert text failed at index ${i}: ${JSON.stringify(insertResult.raw)}`);
+                                        }
+                                        console.log(`[wecom-doc] Item ${i} text inserted successfully`);
                                     }
                                 }
                                 contentResult = "init_content_populated";
