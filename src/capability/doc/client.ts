@@ -563,7 +563,7 @@ export class WecomDocClient {
         // Validate timed_repeat_info and timed_finish are mutually exclusive
         const formSetting = formInfo.form_setting || {};
         if (formSetting.timed_repeat_info?.enable && formSetting.timed_finish) {
-            throw new Error("timed_repeat_info 与 timed_finish 互斥，不能同时设置");
+            console.warn("警告：timed_finish 与 timed_repeat_info 互斥，若都填优先定时重复");
         }
         
         // Validate timed_repeat_info.enable=true requires fill_in_range
@@ -688,14 +688,7 @@ export class WecomDocClient {
             // Validate timed_repeat_info and timed_finish are mutually exclusive
             const formSetting = formInfo.form_setting;
             if (formSetting.timed_repeat_info?.enable && formSetting.timed_finish) {
-                throw new Error("timed_repeat_info 与 timed_finish 互斥，不能同时设置");
-            }
-            
-            // Validate timed_repeat_info.enable=true requires fill_in_range
-            if (formSetting.timed_repeat_info?.enable) {
-                if (!formSetting.fill_in_range || (!formSetting.fill_in_range.userids?.length && !formSetting.fill_in_range.departmentids?.length)) {
-                    throw new Error("timed_repeat_info 开启时，fill_in_range 必填（需指定 userids 或 departmentids）");
-                }
+                console.warn("警告：timed_finish 与 timed_repeat_info 互斥，若都填优先定时重复");
             }
             
             payload.form_info = { form_setting: formSetting };
@@ -981,31 +974,8 @@ export class WecomDocClient {
             // Official API limit: ≤5 operations per batch
             const MAX_OPERATIONS = 5;
             
-            // Copy sheetId into each request if not already present
-            const normalizedRequests = requests.map((req: any) => {
-                if (req.update_range_request && !req.update_range_request.sheet_id) {
-                    return {
-                        ...req,
-                        update_range_request: {
-                            ...req.update_range_request,
-                            sheet_id: normalizedSheetId,
-                        },
-                    };
-                }
-                if (req.delete_dimension_request && !req.delete_dimension_request.sheet_id) {
-                    return {
-                        ...req,
-                        delete_dimension_request: {
-                            ...req.delete_dimension_request,
-                            sheet_id: normalizedSheetId,
-                        },
-                    };
-                }
-                return req;
-            });
-            
             // Validate each request
-            normalizedRequests.forEach((req: any, index: number) => {
+            requests.forEach((req: any, index: number) => {
                 if (req.update_range_request?.grid_data?.rows) {
                     const rows = req.update_range_request.grid_data.rows;
                     const rowCount = rows.length;
@@ -1019,13 +989,13 @@ export class WecomDocClient {
                 }
             });
             
-            if (normalizedRequests.length > MAX_OPERATIONS) {
-                throw new Error(`单次批量更新最多${MAX_OPERATIONS}个操作，当前：${normalizedRequests.length}`);
+            if (requests.length > MAX_OPERATIONS) {
+                throw new Error(`单次批量更新最多${MAX_OPERATIONS}个操作，当前：${requests.length}`);
             }
             
             const body = {
                 docid: normalizedDocId,
-                requests: normalizedRequests
+                requests: requests
             };
             
             const json = await this.postWecomDocApi({
@@ -1306,7 +1276,7 @@ export class WecomDocClient {
             throw new Error("view_ids 必须是非空数组");
         }
         
-        const json = await this.postWecomDocApi({
+        return this.postWecomDocApi({
             path: "/cgi-bin/wedoc/smartsheet/delete_views",
             actionLabel: "smartsheet_del_view",
             agent,
@@ -1316,7 +1286,6 @@ export class WecomDocClient {
                 view_ids: view_ids,
             },
         });
-        return { raw: json };
     }
 
     async smartTableGetViews(params: { 
@@ -1454,7 +1423,7 @@ export class WecomDocClient {
             throw new Error("field_ids 必须是非空数组");
         }
         
-        const json = await this.postWecomDocApi({
+        return this.postWecomDocApi({
             path: "/cgi-bin/wedoc/smartsheet/delete_fields",
             actionLabel: "smartsheet_del_fields",
             agent,
@@ -1464,7 +1433,6 @@ export class WecomDocClient {
                 field_ids: field_ids,
             },
         });
-        return { raw: json };
     }
 
     async smartTableGetFields(params: { 
@@ -1533,9 +1501,37 @@ export class WecomDocClient {
         return this.smartTableOperate({ agent, docId, operation: "update_external_records", bodyData: { sheet_id: sheetId, records } });
     }
 
-    async smartTableAddRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; records: any[] }) {
-        const { agent, docId, sheetId, records } = params;
-        return this.smartTableOperate({ agent, docId, operation: "add_records", bodyData: { sheet_id: sheetId, records } });
+    async smartTableAddRecords(params: { 
+        agent: ResolvedAgentAccount; 
+        docId: string; 
+        sheetId: string; 
+        records: any[];
+        key_type?: string;
+    }) {
+        const { agent, docId, sheetId, records, key_type } = params;
+        
+        // Validate records format per official API spec (doc2.txt line 1594-1601)
+        if (!Array.isArray(records) || records.length === 0) {
+            throw new Error("records 必须是非空数组");
+        }
+        
+        // Validate each record has values object
+        records.forEach((record: any, index: number) => {
+            if (!record.values || typeof record.values !== 'object') {
+                throw new Error(`第${index + 1}条记录缺少 values 对象`);
+            }
+        });
+        
+        const bodyData: Record<string, unknown> = {
+            sheet_id: readString(sheetId),
+            records: records,
+        };
+        
+        if (key_type) {
+            bodyData.key_type = key_type;
+        }
+        
+        return this.smartTableOperate({ agent, docId, operation: "add_records", bodyData });
     }
 
     async smartTableUpdateRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; records: any[] }) {
