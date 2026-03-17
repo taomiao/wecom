@@ -1155,13 +1155,18 @@ export class WecomDocClient {
         return { raw: json, docId };
     }
 
-    async smartTableGetSheets(params: { agent: ResolvedAgentAccount; docId: string }) {
-        const { agent, docId } = params;
+    async smartTableGetSheets(params: { agent: ResolvedAgentAccount; docId: string; sheet_id?: string; need_all_type_sheet?: boolean }) {
+        const { agent, docId, sheet_id, need_all_type_sheet } = params;
+        const payload: Record<string, unknown> = {
+            docid: readString(docId),
+        };
+        if (sheet_id) payload.sheet_id = sheet_id;
+        if (need_all_type_sheet !== undefined) payload.need_all_type_sheet = need_all_type_sheet;
         const json = await this.postWecomDocApi({
             path: "/cgi-bin/wedoc/smartsheet/get_sheet",
             actionLabel: "smartsheet_get_sheet",
             agent,
-            body: { docid: readString(docId) },
+            body: payload,
         });
         return {
             raw: json,
@@ -1183,34 +1188,242 @@ export class WecomDocClient {
         const { agent, docId, sheetId, title } = params;
         return this.smartTableOperate({ agent, docId, operation: "update_sheet", bodyData: { properties: { sheet_id: sheetId, title } } });
     }
-    async smartTableAddView(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; view_title: string; view_type: string; property_gantt?: any; property_calendar?: any }) {
-        const { agent, docId, sheetId, view_title, view_type, property_gantt, property_calendar } = params;
-        return this.smartTableOperate({ agent, docId, operation: "add_view", bodyData: { sheet_id: sheetId, view_title, view_type, property_gantt, property_calendar } });
+    async smartTableAddView(params: { 
+        agent: ResolvedAgentAccount; 
+        docId: string; 
+        sheetId: string; 
+        view_title: string; 
+        view_type: string;
+        property?: any;  // ViewProperty: sort_spec, filter_spec, group_spec, etc.
+        property_gantt?: any;  // Deprecated, use property instead
+        property_calendar?: any;  // Deprecated, use property instead
+    }) {
+        const { agent, docId, sheetId, view_title, view_type, property, property_gantt, property_calendar } = params;
+        const payload: Record<string, unknown> = {
+            docid: readString(docId),
+            sheet_id: readString(sheetId),
+            view_title: readString(view_title),
+            view_type: readString(view_type),
+        };
+        if (property && typeof property === 'object') {
+            payload.property = property;
+        }
+        // Support deprecated property_gantt/property_calendar for backward compatibility
+        if (property_gantt) payload.property_gantt = property_gantt;
+        if (property_calendar) payload.property_calendar = property_calendar;
+        
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/add_view",
+            actionLabel: "smartsheet_add_view",
+            agent,
+            body: payload,
+        });
+        return {
+            raw: json,
+            view: json.view,
+        };
     }
 
-    async smartTableUpdateView(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; view_id: string; view_title?: string; property_gantt?: any; property_calendar?: any }) {
-        const { agent, docId, sheetId, view_id, view_title, property_gantt, property_calendar } = params;
-        return this.smartTableOperate({ agent, docId, operation: "update_view", bodyData: { sheet_id: sheetId, view_id, view_title, property_gantt, property_calendar } });
+    async smartTableUpdateView(params: { 
+        agent: ResolvedAgentAccount; 
+        docId: string; 
+        sheetId: string; 
+        view_id: string; 
+        view_title?: string;
+        property?: any;  // ViewProperty: sort_spec, filter_spec, group_spec, etc.
+        property_gantt?: any;  // Deprecated, use property instead
+        property_calendar?: any;  // Deprecated, use property instead
+    }) {
+        const { agent, docId, sheetId, view_id, view_title, property, property_gantt, property_calendar } = params;
+        const payload: Record<string, unknown> = {
+            docid: readString(docId),
+            sheet_id: readString(sheetId),
+            view_id: readString(view_id),
+        };
+        if (view_title) payload.view_title = readString(view_title);
+        if (property && typeof property === 'object') {
+            payload.property = property;
+        }
+        // Support deprecated property_gantt/property_calendar for backward compatibility
+        if (property_gantt) payload.property_gantt = property_gantt;
+        if (property_calendar) payload.property_calendar = property_calendar;
+        
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/update_view",
+            actionLabel: "smartsheet_update_view",
+            agent,
+            body: payload,
+        });
+        return {
+            raw: json,
+            view: json.view,
+        };
     }
 
     async smartTableDelView(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; view_ids: string[] }) {
         const { agent, docId, sheetId, view_ids } = params;
-        return this.smartTableOperate({ agent, docId, operation: "delete_views", bodyData: { sheet_id: sheetId, view_ids } });
+        
+        if (!Array.isArray(view_ids) || view_ids.length === 0) {
+            throw new Error("view_ids 必须是非空数组");
+        }
+        
+        return this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/delete_views",
+            actionLabel: "smartsheet_del_view",
+            agent,
+            body: {
+                docid: readString(docId),
+                sheet_id: readString(sheetId),
+                view_ids: view_ids,
+            },
+        });
     }
 
-    async smartTableAddFields(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; fields: any[] }) {
+    async smartTableGetViews(params: { 
+        agent: ResolvedAgentAccount; 
+        docId: string; 
+        sheetId: string; 
+        view_ids?: string[];
+        offset?: number;
+        limit?: number;
+    }) {
+        const { agent, docId, sheetId, view_ids, offset, limit } = params;
+        const payload: Record<string, unknown> = {
+            docid: readString(docId),
+            sheet_id: readString(sheetId),
+        };
+        if (view_ids && Array.isArray(view_ids)) payload.view_ids = view_ids;
+        if (offset !== undefined) payload.offset = offset;
+        if (limit !== undefined) payload.limit = limit;
+        
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/get_views",
+            actionLabel: "smartsheet_get_views",
+            agent,
+            body: payload,
+        });
+        return {
+            raw: json,
+            views: readArray(json.views),
+            total: json.total,
+            has_more: json.has_more,
+            next: json.next,
+        };
+    }
+
+    async smartTableAddFields(params: { 
+        agent: ResolvedAgentAccount; 
+        docId: string; 
+        sheetId: string; 
+        fields: any[];
+    }) {
         const { agent, docId, sheetId, fields } = params;
-        return this.smartTableOperate({ agent, docId, operation: "add_fields", bodyData: { sheet_id: sheetId, fields } });
+        
+        // Validate fields per official API spec
+        if (!Array.isArray(fields) || fields.length === 0) {
+            throw new Error("fields 必须是非空数组");
+        }
+        
+        // Validate each field has required field_title and field_type
+        fields.forEach((field: any, index: number) => {
+            if (!field.field_title) {
+                throw new Error(`第${index + 1}个字段：field_title 必填`);
+            }
+            if (!field.field_type) {
+                throw new Error(`第${index + 1}个字段：field_type 必填`);
+            }
+            // Validate field_type is valid enum value
+            const validFieldTypes = [
+                'FIELD_TYPE_TEXT', 'FIELD_TYPE_NUMBER', 'FIELD_TYPE_CHECKBOX',
+                'FIELD_TYPE_DATE_TIME', 'FIELD_TYPE_IMAGE', 'FIELD_TYPE_ATTACHMENT',
+                'FIELD_TYPE_USER', 'FIELD_TYPE_URL', 'FIELD_TYPE_SELECT',
+                'FIELD_TYPE_CREATED_USER', 'FIELD_TYPE_MODIFIED_USER', 'FIELD_TYPE_CREATED_TIME',
+                'FIELD_TYPE_MODIFIED_TIME', 'FIELD_TYPE_PROGRESS', 'FIELD_TYPE_PHONE_NUMBER',
+                'FIELD_TYPE_EMAIL', 'FIELD_TYPE_SINGLE_SELECT', 'FIELD_TYPE_REFERENCE',
+                'FIELD_TYPE_LOCATION', 'FIELD_TYPE_CURRENCY', 'FIELD_TYPE_WWGROUP',
+                'FIELD_TYPE_AUTONUMBER', 'FIELD_TYPE_PERCENTAGE', 'FIELD_TYPE_BARCODE'
+            ];
+            if (!validFieldTypes.includes(field.field_type)) {
+                throw new Error(`第${index + 1}个字段：field_type 必须是有效的字段类型（见 FieldType 枚举）`);
+            }
+        });
+        
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/add_fields",
+            actionLabel: "smartsheet_add_fields",
+            agent,
+            body: {
+                docid: readString(docId),
+                sheet_id: readString(sheetId),
+                fields: fields,
+            },
+        });
+        return {
+            raw: json,
+            fields: readArray(json.fields),
+        };
+    }
+
+    async smartTableUpdateFields(params: { 
+        agent: ResolvedAgentAccount; 
+        docId: string; 
+        sheetId: string; 
+        fields: any[];
+    }) {
+        const { agent, docId, sheetId, fields } = params;
+        
+        // Validate fields per official API spec
+        if (!Array.isArray(fields) || fields.length === 0) {
+            throw new Error("fields 必须是非空数组");
+        }
+        
+        // Validate each field has required field_id and field_type
+        fields.forEach((field: any, index: number) => {
+            if (!field.field_id) {
+                throw new Error(`第${index + 1}个字段：field_id 必填`);
+            }
+            if (!field.field_type) {
+                throw new Error(`第${index + 1}个字段：field_type 必填`);
+            }
+            // field_title is optional for update, but at least one of field_title or property_* must be provided
+            if (!field.field_title && !Object.keys(field).some(key => key.startsWith('property_'))) {
+                throw new Error(`第${index + 1}个字段：field_title 或 property_* 属性至少提供一个`);
+            }
+        });
+        
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/update_fields",
+            actionLabel: "smartsheet_update_fields",
+            agent,
+            body: {
+                docid: readString(docId),
+                sheet_id: readString(sheetId),
+                fields: fields,
+            },
+        });
+        return {
+            raw: json,
+            fields: readArray(json.fields),
+        };
     }
 
     async smartTableDelFields(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; field_ids: string[] }) {
         const { agent, docId, sheetId, field_ids } = params;
-        return this.smartTableOperate({ agent, docId, operation: "delete_fields", bodyData: { sheet_id: sheetId, field_ids } });
-    }
-
-    async smartTableUpdateFields(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; fields: any[] }) {
-        const { agent, docId, sheetId, fields } = params;
-        return this.smartTableOperate({ agent, docId, operation: "update_fields", bodyData: { sheet_id: sheetId, fields } });
+        
+        if (!Array.isArray(field_ids) || field_ids.length === 0) {
+            throw new Error("field_ids 必须是非空数组");
+        }
+        
+        return this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/delete_fields",
+            actionLabel: "smartsheet_del_fields",
+            agent,
+            body: {
+                docid: readString(docId),
+                sheet_id: readString(sheetId),
+                field_ids: field_ids,
+            },
+        });
     }
 
     async smartTableAddGroup(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; name: string; children?: string[] }) {
@@ -1258,9 +1471,51 @@ export class WecomDocClient {
         return this.smartTableOperate({ agent, docId, operation: "delete_records", bodyData: { sheet_id: sheetId, record_ids } });
     }
 
-    async smartTableGetRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; record_ids?: string[]; offset?: number; limit?: number }) {
-        const { agent, docId, sheetId, record_ids, offset, limit } = params;
-        return this.smartTableOperate({ agent, docId, operation: "get_records", bodyData: { sheet_id: sheetId, record_ids, offset, limit } });
+    async smartTableGetRecords(params: { 
+        agent: ResolvedAgentAccount; 
+        docId: string; 
+        sheetId: string; 
+        view_id?: string;
+        record_ids?: string[];
+        key_type?: string;
+        field_titles?: string[];
+        field_ids?: string[];
+        sort?: any[];
+        offset?: number;
+        limit?: number;
+        ver?: number;
+        filter_spec?: any;
+    }) {
+        const { agent, docId, sheetId, view_id, record_ids, key_type, field_titles, field_ids, sort, offset, limit, ver, filter_spec } = params;
+        const payload: Record<string, unknown> = {
+            docid: readString(docId),
+            sheet_id: readString(sheetId),
+        };
+        if (view_id) payload.view_id = view_id;
+        if (record_ids && Array.isArray(record_ids)) payload.record_ids = record_ids;
+        if (key_type) payload.key_type = key_type;
+        if (field_titles && Array.isArray(field_titles)) payload.field_titles = field_titles;
+        if (field_ids && Array.isArray(field_ids)) payload.field_ids = field_ids;
+        if (sort && Array.isArray(sort)) payload.sort = sort;
+        if (offset !== undefined) payload.offset = offset;
+        if (limit !== undefined) payload.limit = limit;
+        if (ver !== undefined) payload.ver = ver;
+        if (filter_spec && typeof filter_spec === 'object') payload.filter_spec = filter_spec;
+        
+        const json = await this.postWecomDocApi({
+            path: "/cgi-bin/wedoc/smartsheet/get_records",
+            actionLabel: "smartsheet_get_records",
+            agent,
+            body: payload,
+        });
+        return {
+            raw: json,
+            records: readArray(json.records),
+            total: json.total,
+            has_more: json.has_more,
+            next: json.next,
+            ver: json.ver,
+        };
     }
 
     // --- Smartsheet Content Permissions ---

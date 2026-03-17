@@ -1100,13 +1100,47 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                         return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格记录已删除", raw: result.raw });
                     }
                     case "smartsheet_get_records": {
-                        const result = await docClient.smartTableOperate({
+                        const result = await docClient.smartTableGetRecords({ agent: account, ...params });
+                        return buildToolResult({ 
+                            ok: true, 
+                            action, 
+                            accountId: account.accountId, 
+                            docId: params.docId, 
+                            summary: result.records?.length ? `智能表格记录已获取：${result.records.length} 条` : "智能表格记录列表已获取",
+                            total: result.total,
+                            has_more: result.has_more,
+                            ver: result.ver,
+                            raw: result.raw,
+                        });
+                    }
+                    case "smartsheet_get_views": {
+                        const result = await docClient.smartTableGetViews({ agent: account, ...params });
+                        return buildToolResult({ 
+                            ok: true, 
+                            action, 
+                            accountId: account.accountId, 
+                            docId: params.docId, 
+                            summary: result.views?.length ? `智能表格视图已获取：${result.views.length} 个` : "智能表格视图列表已获取",
+                            total: result.total,
+                            has_more: result.has_more,
+                            raw: result.raw,
+                        });
+                    }
+                    case "smartsheet_get_sheets": {
+                        const result = await docClient.smartTableGetSheets({
                             agent: account,
                             docId: params.docId,
-                            operation: "get_records",
-                            bodyData: params,
+                            sheet_id: params.sheet_id,
+                            need_all_type_sheet: params.need_all_type_sheet,
                         });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格记录已获取", raw: result.raw });
+                        return buildToolResult({
+                            ok: true,
+                            action: "smartsheet_get_sheets",
+                            accountId: account.accountId,
+                            docId: params.docId,
+                            summary: `智能表格子表列表已获取：${result.sheets.length} 个`,
+                            raw: result.raw,
+                        });
                     }
                     case "smartsheet_add_sheet": {
                         const result = await docClient.smartTableAddSheet({ agent: account, ...params });
@@ -1122,27 +1156,27 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
                     }
                     case "smartsheet_add_view": {
                         const result = await docClient.smartTableAddView({ agent: account, ...params });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格视图已添加", raw: result.raw });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: `智能表格视图已添加：${result.view?.view_title || "未知"}`, raw: result.raw });
                     }
                     case "smartsheet_del_view": {
                         const result = await docClient.smartTableDelView({ agent: account, ...params });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格视图已删除", raw: result.raw });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: `智能表格视图已删除：${params.view_ids?.length || 0} 个`, raw: result.raw });
                     }
-                    case "smartsheet_get_views": {
-                        const result = await docClient.smartTableOperate({ agent: account, docId: params.docId, operation: "get_views", bodyData: { sheet_id: params.sheetId } });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格视图列表已获取", raw: result.raw });
+                    case "smartsheet_update_view": {
+                        const result = await docClient.smartTableUpdateView({ agent: account, ...params });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: `智能表格视图已更新：${result.view?.view_title || "未知"}`, raw: result.raw });
                     }
                     case "smartsheet_add_fields": {
                         const result = await docClient.smartTableAddFields({ agent: account, ...params });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格字段已添加", raw: result.raw });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: `智能表格字段已添加：${result.fields?.length || 0} 个`, raw: result.raw });
                     }
                     case "smartsheet_del_fields": {
                         const result = await docClient.smartTableDelFields({ agent: account, ...params });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格字段已删除", raw: result.raw });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: `智能表格字段已删除：${params.field_ids?.length || 0} 个`, raw: result.raw });
                     }
                     case "smartsheet_update_fields": {
                         const result = await docClient.smartTableUpdateFields({ agent: account, ...params });
-                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: "智能表格字段已更新", raw: result.raw });
+                        return buildToolResult({ ok: true, action, accountId: account.accountId, docId: params.docId, summary: `智能表格字段已更新：${result.fields?.length || 0} 个`, raw: result.raw });
                     }
                     case "smartsheet_update_view": {
                         const result = await docClient.smartTableUpdateView({ agent: account, ...params });
