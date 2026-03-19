@@ -15,6 +15,7 @@
     "docType": "doc|spreadsheet|smart_table|3|4|10",
     "spaceId": "可选：空间 ID",
     "fatherId": "可选：父目录 fileid",
+    "adminUsers": "可选但推荐：文档管理员 userid 列表，创建智能表格时建议填写",
     "viewers": "可选：查看成员列表",
     "collaborators": "可选：协作者列表",
     "init_content": "可选：初始内容数组"
@@ -27,6 +28,11 @@
   }
 }
 ```
+
+**⚠️ 智能表格创建注意事项**:
+1. **adminUsers 参数** - 创建智能表格时强烈建议传入 `adminUsers: ["userid1", "userid2"]`，确保有管理员权限
+2. **自动初始化** - 创建智能表格后会自动清理默认字段（5 个保留 1 个）和默认空白记录（5 条）
+3. **默认字段类型** - 文本、数字、日期、单选、人员，其中文本/数字/日期等可作为主键
 
 ### 1.2 重命名文档
 ```json
@@ -448,6 +454,16 @@
 }
 ```
 
+**⚠️ 智能表格自动初始化**:
+创建智能表格 (`docType=10` 或 `smart_table`) 时，系统会自动执行以下初始化操作：
+1. 获取默认子表（类型为 `smartsheet` 的第一个子表）
+2. 获取默认字段（通常有 5 个：文本、数字、日期、单选、人员）
+3. 删除 4 个默认字段，保留 1 个可作为主键的字段
+4. 获取默认记录（通常有 5 条空白记录）
+5. 删除所有默认空白记录
+
+这样可以确保新创建的智能表格是干净的，用户可以根据需求添加自定义字段和记录。
+
 ### 5.2 添加子表
 ```json
 {
@@ -600,7 +616,8 @@
     "fields[].property_currency": "可选：object，货币类型的字段属性，{currency_type: \"CURRENCY_TYPE_CNY\", decimal_places: 2, use_separate: true}",
     "fields[].property_ww_group": "可选：object，群类型的字段属性，{allow_multiple: true}",
     "fields[].property_percentage": "可选：object，百分数类型的字段属性，{decimal_places: 2, use_separate: true}",
-    "fields[].property_barcode": "可选：object，条码类型的字段属性，{mobile_scan_only: false}"
+    "fields[].property_barcode": "可选：object，条码类型的字段属性，{mobile_scan_only: false}",
+    "autoCleanupDefaultField": "可选：boolean，是否自动删除遗留的默认字段（默认 true）"
   },
   "returns": {
     "errcode": "integer，错误码",
@@ -696,6 +713,8 @@
 2. **新增选项时不需要 id** - 只需填写 `text` 和 `style`，系统会自动生成 id
 3. **field_type 必须使用官方常量** - 如 `FIELD_TYPE_TEXT`、`FIELD_TYPE_NUMBER` 等
 4. **单表最多 150 个字段** - 超过限制会失败
+5. **默认字段清理** - 创建智能表格时会自动清理默认字段（保留 1 个）
+6. **自动删除遗留字段** - 第一次调用 `smartsheet_add_fields` 添加新字段后，会自动删除遗留的默认字段（可通过 `autoCleanupDefaultField: false` 禁用）
 
 **字段类型与属性对照表**:
 
@@ -981,24 +1000,24 @@
   "parameters": {
     "docId": "必填：string，文档的 docid",
     "sheetId": "必填：string，Smartsheet 子表 ID",
-    "key_type": "可选：string，返回记录中单元格的 key 类型，CELL_VALUE_KEY_TYPE_FIELD_TITLE(默认，用字段标题)|CELL_VALUE_KEY_TYPE_FIELD_ID(用字段 ID)",
-    "records": "必填：object[]，需要添加的记录数组，每个记录包含 values 对象",
-    "records[].values": "必填：object，记录的具体内容，key 为字段标题或字段 ID，value 为数组（根据字段类型不同而不同）",
-    "records[].values.文本字段": "可选：object[]，文本类型字段值，[{\"type\": \"text\", \"text\": \"内容\"}] 或 [{\"type\": \"url\", \"text\": \"显示文本\", \"link\": \"跳转 URL\"}]",
-    "records[].values.数字字段": "可选：number[]，数字类型字段值，如 [25]",
-    "records[].values.日期字段": "可选：string[]，日期类型字段值，毫秒级 Unix 时间戳字符串，如 [\"1747152000000\"]",
-    "records[].values.多选字段": "可选：object[]，多选类型字段值，[{\"id\": \"选项 ID\", \"text\": \"选项文本\", \"style\": 1}]",
-    "records[].values.单选字段": "可选：object[]，单选类型字段值，[{\"id\": \"选项 ID\", \"text\": \"选项文本\", \"style\": 1}]",
-    "records[].values.成员字段": "可选：object[]，成员类型字段值，[{\"user_id\": \"成员 userid\"}]",
-    "records[].values.复选框字段": "可选：boolean[]，复选框类型字段值，[true] 或 [false]",
-    "records[].values.进度字段": "可选：number[]，进度类型字段值，[0.5] 表示 50%",
-    "records[].values.电话字段": "可选：string[]，电话类型字段值，[\"13800138000\"]",
-    "records[].values.邮箱字段": "可选：string[]，邮箱类型字段值，[\"test@example.com\"]",
-    "records[].values.链接字段": "可选：object[]，链接类型字段值，[{\"type\": \"url\", \"text\": \"显示文本\", \"link\": \"跳转 URL\"}]",
-    "records[].values.地理位置字段": "可选：object[]，地理位置字段值，[{\"id\": \"地点 ID\", \"latitude\": \"纬度\", \"longitude\": \"经度\", \"title\": \"地点名称\", \"source_type\": 1}]",
-    "records[].values.货币字段": "可选：number[]，货币类型字段值，[100.50]",
-    "records[].values.百分数字段": "可选：number[]，百分数类型字段值，[0.75] 表示 75%",
-    "records[].values.条码字段": "可选：string[]，条码类型字段值，[\"6901234567890\"]"
+    "key_type": "可选：string，values 的 key 类型，CELL_VALUE_KEY_TYPE_FIELD_TITLE(默认，用字段标题)|CELL_VALUE_KEY_TYPE_FIELD_ID(用字段 ID)",
+    "records": "必填：object[]，需要添加的记录数组",
+    "records[].values": "必填：object，记录的具体内容，key 为字段标题或字段 ID",
+    "records[].values.文本字段 (FIELD_TYPE_TEXT)": "可选：object[]，[{\"type\": \"text\", \"text\": \"内容\"}] 或 [{\"type\": \"url\", \"text\": \"文本\", \"link\": \"URL\"}]",
+    "records[].values.数字字段 (FIELD_TYPE_NUMBER)": "可选：number，直接写数字如 25 或 15000.50（不需要数组）",
+    "records[].values.日期字段 (FIELD_TYPE_DATE_TIME)": "可选：string，毫秒时间戳字符串如 \"1704067200000\"（不需要数组）",
+    "records[].values.多选字段 (FIELD_TYPE_SELECT)": "可选：object[]，[{\"text\": \"选项文本\", \"style\": 1}] 新增选项，或 [{\"id\": \"已有选项 ID\"}] 使用已有选项",
+    "records[].values.单选字段 (FIELD_TYPE_SINGLE_SELECT)": "可选：object[]，[{\"text\": \"选项文本\", \"style\": 1}] 新增选项，或 [{\"id\": \"已有选项 ID\"}] 使用已有选项",
+    "records[].values.成员字段 (FIELD_TYPE_USER)": "可选：object[]，[{\"user_id\": \"成员 userid\"}]",
+    "records[].values.复选框字段 (FIELD_TYPE_CHECKBOX)": "可选：boolean[]，[true] 或 [false]",
+    "records[].values.进度字段 (FIELD_TYPE_PROGRESS)": "可选：number，直接写数字如 0.5 表示 50%（不需要数组）",
+    "records[].values.电话字段 (FIELD_TYPE_PHONE_NUMBER)": "可选：string[]，[\"13800138000\"]",
+    "records[].values.邮箱字段 (FIELD_TYPE_EMAIL)": "可选：string[] 或 object[]，[\"test@example.com\"] 或 [{\"type\": \"url\", \"text\": \"test@example.com\", \"link\": \"mailto:test@example.com\"}]",
+    "records[].values.链接字段 (FIELD_TYPE_URL)": "可选：object[]，[{\"type\": \"url\", \"text\": \"显示文本\", \"link\": \"跳转 URL\"}]",
+    "records[].values.地理位置字段 (FIELD_TYPE_LOCATION)": "可选：object[]，[{\"id\": \"地点 ID\", \"latitude\": \"纬度\", \"longitude\": \"经度\", \"title\": \"地点名称\", \"source_type\": 1}]",
+    "records[].values.货币字段 (FIELD_TYPE_CURRENCY)": "可选：number，直接写数字如 100.50（不需要数组）",
+    "records[].values.百分数字段 (FIELD_TYPE_PERCENTAGE)": "可选：number，直接写数字如 0.75 表示 75%（不需要数组）",
+    "records[].values.条码字段 (FIELD_TYPE_BARCODE)": "可选：string[]，[\"6901234567890\"]"
   },
   "returns": {
     "errcode": "integer，错误码",
@@ -1021,27 +1040,51 @@
       {
         "values": {
           "姓名": [{"type": "text", "text": "张三"}],
-          "年龄": [25],
+          "年龄": 25,
           "部门": [{"type": "text", "text": "技术部"}],
-          "入职日期": ["1704067200000"],
+          "入职日期": "1704067200000",
           "是否全职": [true],
-          "工资": [15000.50]
-        }
-      },
-      {
-        "values": {
-          "姓名": [{"type": "text", "text": "李四"}],
-          "年龄": [28],
-          "部门": [{"type": "text", "text": "产品部"}],
-          "入职日期": ["1704153600000"],
-          "是否全职": [true],
-          "工资": [18000.00]
+          "工资": 15000.50
         }
       }
     ]
   }
 }
 ```
+
+**⚠️ 关键格式说明（根据实际 API 测试）**:
+
+1. **字段值格式因类型而异**:
+   - ✅ 数字类型 (NUMBER, PROGRESS, CURRENCY, PERCENTAGE): 直接写数字 `25`、`0.75`、`100.50`
+   - ✅ 日期类型 (DATE_TIME): 直接写毫秒时间戳字符串 `"1704067200000"`
+   - ✅ 文本类型 (TEXT, URL): 数组格式 `[{"type": "text", "text": "内容"}]`
+   - ✅ 成员类型 (USER): 数组格式 `[{"user_id": "zhangsan"}]`
+   - ✅ 选项类型 (SELECT, SINGLE_SELECT): 数组格式 `[{"text": "选项", "style": 1}]` 或 `[{"id": "opt1"}]`
+   - ✅ 复选框 (CHECKBOX): 数组格式 `[true]` 或 `[false]`
+   - ✅ 电话/邮箱/条码：数组格式 `["13800138000"]`
+
+2. **文本类型必须带 type 字段**
+   - 普通文本：`[{"type": "text", "text": "内容"}]`
+   - 链接文本：`[{"type": "url", "text": "显示文本", "link": "跳转 URL"}]`
+
+3. **日期类型是毫秒时间戳字符串**
+   - ✅ 正确：`"1704067200000"`
+   - ❌ 错误：`1704067200000`（数字）、`"2024-01-01"`（日期字符串）
+
+4. **单选/多选字段使用 Option 对象**
+   - 新增选项：`[{"text": "选项文本", "style": 1}]`（不需要 id）
+   - 使用已有选项：`[{"id": "已有选项 ID"}]`（优先匹配已有选项）
+
+5. **values 的 key 必须与字段标题或字段 ID 完全匹配**
+   - 如果 `key_type` 为 `CELL_VALUE_KEY_TYPE_FIELD_TITLE`，使用字段标题
+   - 如果 `key_type` 为 `CELL_VALUE_KEY_TYPE_FIELD_ID`，使用字段 ID
+
+6. **严格验证，不自动转换**:
+   - ❌ 不会将普通字符串自动转换为 `[{"type": "text", "text": "..."}]`
+   - ❌ 不会将 13 位数字字符串误判为时间戳（必须是字符串格式）
+   - ✅ 数字和日期类型保持原样
+   - ✅ 对象格式自动包裹为数组：`{user_id: "..."}` → `[{user_id: "..."}]`
+   - ⚠️ 模糊的原始值（如普通字符串 `"张三"`）会被拒绝，必须明确使用数组格式
 
 **使用示例** - 添加多选和成员记录:
 ```json
@@ -1056,8 +1099,8 @@
         "values": {
           "姓名": [{"type": "text", "text": "王五"}],
           "技能": [
-            {"id": "opt1", "text": "Java", "style": 1},
-            {"id": "opt2", "text": "Python", "style": 2}
+            {"text": "Java", "style": 1},
+            {"text": "Python", "style": 2}
           ],
           "负责人": [{"user_id": "zhangsan"}],
           "进度": [0.75],
@@ -1069,30 +1112,55 @@
 }
 ```
 
+**⚠️ 单选/多选字段格式说明**:
+
+1. **新增选项**（选项中不存在该值）:
+   ```json
+   [{"text": "新选项", "style": 1}]
+   ```
+   - 不需要填写 `id`
+   - 必须填写 `text` 和 `style`（颜色 1-27）
+
+2. **使用已有选项**（选项中已存在）:
+   ```json
+   [{"id": "已有选项 ID"}]
+   ```
+   - 只需要填写 `id`
+   - 系统会优先匹配已有选项
+
+3. **混合使用**:
+   ```json
+   [
+     {"id": "已有选项 ID"},
+     {"text": "新选项", "style": 1}
+   ]
+   ```
+
 **⚠️ 重要注意事项**:
-1. **所有字段值都必须是数组** - 即使是单个值也要用数组包裹，如 `[25]` 而不是 `25`
-2. **文本类型必须带 type** - `{"type": "text", "text": "内容"}` 或直接文本 `{"text": "内容"}`
+1. **字段值格式因类型而异** - 数字/日期类型直接写值（`25`、`"1704067200000"`），文本/成员/选项类型用数组（`[{"type": "text", "text": "内容"}]`）
+2. **文本类型必须带 type** - `[{"type": "text", "text": "内容"}]` 或 `[{"type": "url", "text": "文本", "link": "URL"}]`
 3. **不能添加记录的字段类型** - 创建时间、最后编辑时间、创建人、最后编辑人这四种类型的字段不能通过接口添加值（系统自动填充）
 4. **key_type 决定 values 的 key** - 使用字段标题或字段 ID 作为 key，默认使用字段标题
 5. **单次添加建议 500 行内** - 避免超时或失败
+6. **插件严格验证** - 拒绝模糊的原始值，必须使用正确的格式
 
 **字段类型与值类型对照表**:
 
 | 字段类型 | 值类型 | 示例值 |
 |----------|--------|--------|
 | 文本 (FIELD_TYPE_TEXT) | object[] | `[{"type": "text", "text": "内容"}]` |
-| 数字 (FIELD_TYPE_NUMBER) | number[] | `[25]` 或 `[15000.50]` |
+| 数字 (FIELD_TYPE_NUMBER) | number | `25` 或 `15000.50` |
 | 复选框 (FIELD_TYPE_CHECKBOX) | boolean[] | `[true]` 或 `[false]` |
-| 日期 (FIELD_TYPE_DATE_TIME) | string[] | `["1704067200000"]` (毫秒时间戳) |
+| 日期 (FIELD_TYPE_DATE_TIME) | string | `"1704067200000"` (毫秒时间戳) |
 | 成员 (FIELD_TYPE_USER) | object[] | `[{"user_id": "zhangsan"}]` |
 | 多选 (FIELD_TYPE_SELECT) | object[] | `[{"id": "opt1", "text": "选项", "style": 1}]` |
 | 单选 (FIELD_TYPE_SINGLE_SELECT) | object[] | `[{"id": "opt1", "text": "选项", "style": 1}]` |
-| 进度 (FIELD_TYPE_PROGRESS) | number[] | `[0.75]` (0-1 之间) |
+| 进度 (FIELD_TYPE_PROGRESS) | number | `0.75` (0-1 之间) |
 | 电话 (FIELD_TYPE_PHONE_NUMBER) | string[] | `["13800138000"]` |
 | 邮箱 (FIELD_TYPE_EMAIL) | string[] 或 object[] | `["test@example.com"]` 或 `[{"type": "url", "text": "test@example.com", "link": "mailto:test@example.com"}]` |
 | 链接 (FIELD_TYPE_URL) | object[] | `[{"type": "url", "text": "显示文本", "link": "https://..."}]` |
-| 货币 (FIELD_TYPE_CURRENCY) | number[] | `[100.50]` |
-| 百分数 (FIELD_TYPE_PERCENTAGE) | number[] | `[0.75]` (表示 75%) |
+| 货币 (FIELD_TYPE_CURRENCY) | number | `100.50` |
+| 百分数 (FIELD_TYPE_PERCENTAGE) | number | `0.75` (表示 75%) |
 | 条码 (FIELD_TYPE_BARCODE) | string[] | `["6901234567890"]` |
 | 地理位置 (FIELD_TYPE_LOCATION) | object[] | `[{"id": "地点 ID", "latitude": "23.10647", "longitude": "113.32446", "title": "广州塔", "source_type": 1}]` |
 
@@ -1105,25 +1173,11 @@
   "parameters": {
     "docId": "必填：string，文档的 docid",
     "sheetId": "必填：string，Smartsheet 子表 ID",
-    "key_type": "可选：string，返回记录中单元格的 key 类型，CELL_VALUE_KEY_TYPE_FIELD_TITLE(默认)|CELL_VALUE_KEY_TYPE_FIELD_ID",
+    "key_type": "可选：string，请求中 values 的 key 类型，使用字段标题（默认）或字段 ID",
     "records": "必填：object[]，需要更新的记录数组",
     "records[].record_id": "必填：string，记录 ID",
-    "records[].values": "必填：object，记录的具体内容，key 为字段标题或字段 ID，value 为数组（根据字段类型不同而不同）",
-    "records[].values.文本字段": "可选：object[]，文本类型字段值，[{\"type\": \"text\", \"text\": \"新内容\"}]",
-    "records[].values.数字字段": "可选：number[]，数字类型字段值，如 [26]",
-    "records[].values.日期字段": "可选：string[]，日期类型字段值，毫秒级 Unix 时间戳字符串",
-    "records[].values.多选字段": "可选：object[]，多选类型字段值",
-    "records[].values.单选字段": "可选：object[]，单选类型字段值",
-    "records[].values.成员字段": "可选：object[]，成员类型字段值",
-    "records[].values.复选框字段": "可选：boolean[]，复选框类型字段值",
-    "records[].values.进度字段": "可选：number[]，进度类型字段值",
-    "records[].values.电话字段": "可选：string[]",
-    "records[].values.邮箱字段": "可选：string[]",
-    "records[].values.链接字段": "可选：object[]",
-    "records[].values.地理位置字段": "可选：object[]",
-    "records[].values.货币字段": "可选：number[]",
-    "records[].values.百分数字段": "可选：number[]",
-    "records[].values.条码字段": "可选：string[]"
+    "records[].values": "必填：object，记录的具体内容，格式与添加记录相同",
+    "记录格式参考添加记录": "数字/日期类型直接写值，文本/成员/选项类型用数组"
   },
   "returns": {
     "errcode": "integer，错误码",
@@ -1146,9 +1200,9 @@
         "record_id": "re9IqD",
         "values": {
           "姓名": [{"type": "text", "text": "张三丰"}],
-          "年龄": [26],
+          "年龄": 26,
           "部门": [{"type": "text", "text": "技术部"}],
-          "工资": [16000.00],
+          "工资": 16000.00,
           "是否全职": [true]
         }
       },
@@ -1156,9 +1210,9 @@
         "record_id": "rpS0P9",
         "values": {
           "姓名": [{"type": "text", "text": "李四光"}],
-          "年龄": [29],
+          "年龄": 29,
           "部门": [{"type": "text", "text": "产品部"}],
-          "工资": [19000.00]
+          "工资": 19000.00
         }
       }
     ]
@@ -1168,10 +1222,10 @@
 
 **⚠️ 重要注意事项**:
 1. **必须指定 record_id** - 用于标识要更新的记录
-2. **所有字段值都必须是数组** - 与添加记录相同
+2. **字段值格式与添加记录相同** - 数字/日期类型直接写值，文本/成员/选项类型用数组
 3. **不能更新的字段类型** - 创建时间、最后编辑时间、创建人、最后编辑人（系统自动更新）
 4. **只更新指定的字段** - 未指定的字段保持不变
-5. **文本类型必须带 type** - `{"type": "text", "text": "内容"}`
+5. **文本类型必须带 type** - `[{"type": "text", "text": "内容"}]`
 
 ### 5.19 删除记录
 ```json
@@ -1322,9 +1376,9 @@
       "record_id": "re9IqD",
       "values": {
         "姓名": [{"type": "text", "text": "张三"}],
-        "年龄": [25],
+        "年龄": 25,
         "部门": [{"type": "text", "text": "技术部"}],
-        "入职日期": ["1704067200000"],
+        "入职日期": "1704067200000",
         "是否全职": [true]
       }
     },
@@ -1332,9 +1386,9 @@
       "record_id": "rpS0P9",
       "values": {
         "姓名": [{"type": "text", "text": "李四"}],
-        "年龄": [28],
+        "年龄": 28,
         "部门": [{"type": "text", "text": "产品部"}],
-        "入职日期": ["1704153600000"],
+        "入职日期": "1704153600000",
         "是否全职": [true]
       }
     }
@@ -1342,11 +1396,13 @@
 }
 ```
 
+**注意**: 实际 API 返回的数据格式可能因字段类型而异，插件会自动规范化处理。
+
 **⚠️ 重要注意事项**:
-1. **values 中的值都是数组** - 所有字段类型的值都是数组格式
-2. **文本类型带 type 字段** - `{"type": "text", "text": "内容"}`
-3. **数字类型直接是数字** - `[25]`、`[15000.50]`
-4. **日期类型是毫秒时间戳字符串** - `["1704067200000"]`
+1. **字段值格式因类型而异** - 数字/日期类型是直接值，文本/成员/选项类型是数组
+2. **文本类型带 type 字段** - `[{"type": "text", "text": "内容"}]`
+3. **数字类型直接是数字** - `25`、`15000.50`（不是数组）
+4. **日期类型是毫秒时间戳字符串** - `"1704067200000"`（不是数组）
 5. **选项类型需要 id** - `[{"id": "opt1", "text": "选项", "style": 1}]`
 6. **成员类型需要 user_id** - `[{"user_id": "zhangsan"}]`
 
@@ -1733,7 +1789,7 @@
       {
         "values": {
           "姓名": [{"type": "text", "text": "张三"}],
-          "年龄": [25],
+          "年龄": 25,
           "部门": [{"type": "text", "text": "技术部"}]
         }
       }
@@ -1886,24 +1942,15 @@
   "parameters": {
     "docId": "DOCID123",
     "sheetId": "SHEET456",
+    "key_type": "CELL_VALUE_KEY_TYPE_FIELD_TITLE",
     "records": [
       {
         "values": {
           "姓名": [{"type": "text", "text": "张三"}],
-          "年龄": [25],
-          "部门": [{"id": "opt1", "text": "技术部", "style": 1}],
-          "入职日期": ["1704067200000"],
-          "工资": [15000.50],
-          "是否全职": [true]
-        }
-      },
-      {
-        "values": {
-          "姓名": [{"type": "text", "text": "李四"}],
-          "年龄": [28],
-          "部门": [{"id": "opt2", "text": "产品部", "style": 2}],
-          "入职日期": ["1704153600000"],
-          "工资": [18000.00],
+          "年龄": 25,
+          "部门": [{"text": "技术部", "style": 1}],
+          "入职日期": "1704067200000",
+          "工资": 15000.50,
           "是否全职": [true]
         }
       }
@@ -1913,10 +1960,13 @@
 ```
 
 **⚠️ 关键格式说明**:
-- **所有字段值都是数组** - `[25]` 而不是 `25`
-- **文本类型必须带 type** - `[{"type": "text", "text": "张三"}]`
-- **选项类型需要 id** - `[{"id": "opt1", "text": "技术部", "style": 1}]`
-- **日期类型是毫秒时间戳** - `["1704067200000"]`
+1. **数字/日期类型直接写值** - `25`、`"1704067200000"`、`15000.50`
+2. **文本类型必须带 type** - `[{"type": "text", "text": "张三"}]`
+3. **选项类型（单选/多选）**：
+   - 新增选项：`[{"text": "技术部", "style": 1}]`（不需要 id）
+   - 使用已有选项：`[{"id": "选项 ID"}]`
+4. **日期类型是毫秒时间戳字符串** - `"1704067200000"`（不是数组）
+5. **values 的 key 必须与字段标题完全匹配**（如果 `key_type` 为 `CELL_VALUE_KEY_TYPE_FIELD_TITLE`）
 
 ---
 
@@ -1947,10 +1997,10 @@
       "record_id": "re9IqD",
       "values": {
         "姓名": [{"type": "text", "text": "张三"}],
-        "年龄": [25],
+        "年龄": 25,
         "部门": [{"id": "opt1", "text": "技术部", "style": 1}],
-        "入职日期": ["1704067200000"],
-        "工资": [15000.50],
+        "入职日期": "1704067200000",
+        "工资": 15000.50,
         "是否全职": [true]
       }
     },
@@ -1958,10 +2008,10 @@
       "record_id": "rpS0P9",
       "values": {
         "姓名": [{"type": "text", "text": "李四"}],
-        "年龄": [28],
+        "年龄": 28,
         "部门": [{"id": "opt2", "text": "产品部", "style": 2}],
-        "入职日期": ["1704153600000"],
-        "工资": [18000.00],
+        "入职日期": "1704153600000",
+        "工资": 18000.00,
         "是否全职": [true]
       }
     }
@@ -1985,7 +2035,7 @@
         "record_id": "re9IqD",
         "values": {
           "姓名": [{"type": "text", "text": "张三丰"}],
-          "工资": [16000.00]
+          "工资": 16000.00
         }
       }
     ]
@@ -2036,15 +2086,51 @@
 - **一种字段类型对应一种字段属性**
 
 ### 5. 智能表格记录格式（⚠️ 重要）
-- **所有字段值都必须是数组** - 即使是单个值也要用数组包裹
-  - ✅ 正确：`[25]`、`[{"type": "text", "text": "内容"}]`
-  - ❌ 错误：`25`、`{"type": "text", "text": "内容"}`
-- **文本类型必须带 type 字段** - `{"type": "text", "text": "内容"}` 或 `{"type": "url", "text": "文本", "link": "URL"}`
-- **数字类型直接是数字** - `[25]`、`[15000.50]`
-- **日期类型是毫秒时间戳字符串** - `["1704067200000"]`
-- **选项类型需要 id** - `[{"id": "opt1", "text": "选项", "style": 1}]`
-- **成员类型需要 user_id** - `[{"user_id": "zhangsan"}]`
-- **不能添加/更新的字段类型**：创建时间、最后编辑时间、创建人、最后编辑人（系统自动填充）
+
+#### 5.1 字段值格式因类型而异
+不同字段类型的值格式不同：
+- **数字/日期/货币/进度/百分数类型**：直接写值，不需要数组
+  - ✅ 正确：`25`、`"1704067200000"`、`15000.50`、`0.75`
+  - ❌ 错误：`[25]`、`["1704067200000"]`、`[15000.50]`、`[0.75]`
+- **文本/成员/选项/复选框/电话/邮箱/链接/条码/地理位置类型**：必须用数组
+  - ✅ 正确：`[{"type": "text", "text": "内容"}]`、`[{"user_id": "zhangsan"}]`、`[true]`
+  - ❌ 错误：`{"type": "text", "text": "内容"}`、`{"user_id": "zhangsan"}`、`true`
+
+#### 5.2 各类型字段值格式详解
+
+| 字段类型 | 值格式 | 示例 |
+|----------|--------|------|
+| 文本 (FIELD_TYPE_TEXT) | object[] | `[{"type": "text", "text": "张三"}]` |
+| 数字 (FIELD_TYPE_NUMBER) | number | `25`、`15000.50` |
+| 日期 (FIELD_TYPE_DATE_TIME) | string | `"1704067200000"`（毫秒时间戳） |
+| 复选框 (FIELD_TYPE_CHECKBOX) | boolean[] | `[true]`、`[false]` |
+| 多选 (FIELD_TYPE_SELECT) | object[] | 新增：`[{"text": "选项", "style": 1}]`，已有：`[{"id": "选项 ID"}]` |
+| 单选 (FIELD_TYPE_SINGLE_SELECT) | object[] | 新增：`[{"text": "选项", "style": 1}]`，已有：`[{"id": "选项 ID"}]` |
+| 成员 (FIELD_TYPE_USER) | object[] | `[{"user_id": "zhangsan"}]` |
+| 进度 (FIELD_TYPE_PROGRESS) | number | `0.75`（0-1 之间） |
+| 电话 (FIELD_TYPE_PHONE_NUMBER) | string[] | `["13800138000"]` |
+| 邮箱 (FIELD_TYPE_EMAIL) | string[] 或 object[] | `["test@example.com"]` 或 `[{"type": "url", "text": "test@example.com", "link": "mailto:test@example.com"}]` |
+| 链接 (FIELD_TYPE_URL) | object[] | `[{"type": "url", "text": "显示文本", "link": "https://..."}]` |
+| 货币 (FIELD_TYPE_CURRENCY) | number | `100.50` |
+| 百分数 (FIELD_TYPE_PERCENTAGE) | number | `0.75`（表示 75%） |
+| 条码 (FIELD_TYPE_BARCODE) | string[] | `["6901234567890"]` |
+| 地理位置 (FIELD_TYPE_LOCATION) | object[] | `[{"id": "地点 ID", "latitude": "23.10647", "longitude": "113.32446", "title": "广州塔", "source_type": 1}]` |
+
+#### 5.3 文本类型值的 type 字段
+- `text` - 普通文本内容
+- `url` - 链接文本（需要同时提供 `link` 字段）
+
+#### 5.4 选项类型（单选/多选）的填写规则
+- **新增选项**：`{"text": "选项内容", "style": 颜色编号 (1-27)}`
+- **使用已有选项**：`{"id": "已有选项 ID"}`
+- **系统会优先匹配已有选项**，如果匹配不到则新增选项
+
+#### 5.5 不能添加/更新的字段类型
+以下字段类型由系统自动填充，不能通过接口添加或更新：
+- 创建时间 (FIELD_TYPE_CREATED_TIME)
+- 最后编辑时间 (FIELD_TYPE_MODIFIED_TIME)
+- 创建人 (FIELD_TYPE_CREATED_USER)
+- 最后编辑人 (FIELD_TYPE_MODIFIED_USER)
 
 ### 6. 智能表格限制
 - **单表最多 100000 行记录**
@@ -2062,17 +2148,20 @@
 
 | 问题 | 原因 | 解决方案 |
 |------|------|----------|
-| 数据都填充到一列 | values 的 key 不是字段标题或字段 ID | 检查 key_type 设置，确保 key 与字段标题或字段 ID 完全匹配 |
-| 多余的行 | 记录数组格式错误 | 确保 records 是数组，每个记录是独立对象 |
-| 无法添加自定义字段 | field_type 或 property 不匹配 | 检查字段类型与属性的对应关系 |
-| 无法修改默认字段 | 尝试修改系统字段 | 创建时间、最后编辑时间、创建人、最后编辑人不能修改 |
-| 添加记录失败 | 值格式不是数组 | 确保所有字段值都是数组格式 |
-| 日期字段错误 | 使用了秒级时间戳 | 使用毫秒级时间戳字符串，如 "1704067200000" |
-| 选项字段错误 | 缺少 id 或格式错误 | 使用 `[{"id": "选项 ID", "text": "选项文本", "style": 1}]` 格式 |
+| 数据都填充到一列 | values 的 key 不是字段标题或字段 ID | 检查 key_type 设置，确保 key 与字段标题或字段 ID 完全匹配（包括空格和大小写） |
+| 多余的行 | records 数组格式错误 | 确保 records 是数组，每个记录是独立对象 `[{values: {...}}, {values: {...}}]` |
+| 无法添加自定义字段 | field_type 或 property 不匹配 | 检查字段类型与属性的对应关系，见字段类型对照表 |
+| 无法修改默认字段 | 尝试修改系统字段 | 创建时间、最后编辑时间、创建人、最后编辑人不能通过接口修改 |
+| 添加记录失败 | 值格式错误 | 数字/日期类型直接写值，文本/成员等类型用数组，插件会自动规范化 |
+| 日期字段错误 | 使用了秒级时间戳或日期字符串 | 使用毫秒级时间戳字符串 `"1704067200000"` 而不是 `1704067200000` 或 `"2024-01-01"` |
+| 选项字段错误 | 格式错误或缺少必要字段 | 新增选项：`[{"text": "选项", "style": 1}]`，使用已有：`[{"id": "选项 ID"}]` |
+| 单选字段添加失败 | 使用了错误的格式 | 单选和多选格式相同，都是 Option 对象数组 |
+| 文本字段添加失败 | 缺少 type 字段 | 文本类型必须是 `[{"type": "text", "text": "内容"}]` 格式 |
+| 链接字段添加失败 | 格式错误 | 链接类型必须是 `[{"type": "url", "text": "文本", "link": "URL"}]` 格式 |
 
 ---
 
-**文档版本**: 2026-03-18  
+**文档版本**: 2026-03-18 v2  
 **适用版本**: OpenClaw WeChat Plugin v2.3.16+  
 **官方文档**: 企业微信开放平台 - 文档 API
 
@@ -2080,17 +2169,80 @@
 
 ## 修正记录 (Revision History)
 
-### 2026-03-18 重大修正
+### 2026-03-18 v2 - 智能表格记录格式修正
+
+#### 修复的问题：
+
+1. **选项字段格式错误** ❌ → ✅
+   - **问题**：单选/多选字段使用了错误的格式 `[{"id": "opt1", "text": "选项", "style": 1}]`
+   - **原因**：混淆了新增选项和使用已有选项的格式
+   - **修正**：
+     - 新增选项：`[{"text": "选项内容", "style": 颜色编号}]`（不需要 id）
+     - 使用已有选项：`[{"id": "已有选项 ID"}]`（只需要 id）
+   - **官方文档依据**：doc2.txt 第 1747-1757 行 Option 说明
+
+2. **日期字段格式说明不清晰** ❌ → ✅
+   - **问题**：没有强调必须是毫秒时间戳字符串
+   - **修正**：明确指出使用 `"1704067200000"` 格式（字符串），不是数字 `1704067200000`
+   - **官方文档依据**：doc2.txt 第 1679 行
+
+3. **添加完整的值格式对照表** ❌ → ✅
+   - **问题**：缺少 15 种字段类型的完整值格式说明
+   - **修正**：添加详细的表格，包含每种类型的正确格式和示例
+
+4. **常见错误排查不完善** ❌ → ✅
+   - **问题**：缺少单选字段、文本字段、链接字段等错误排查
+   - **修正**：添加 10 种常见错误及解决方案
+
+5. **使用示例优化** ❌ → ✅
+   - **问题**：示例中的选项字段格式不正确
+   - **修正**：更新所有示例，使用正确的选项格式
+
+#### 新增内容：
+
+1. **15 种字段类型的值格式对照表** - 包含所有支持的字段的值格式
+2. **文本类型 type 字段说明** - text 和 url 的区别
+3. **选项类型填写规则** - 新增选项 vs 使用已有选项
+4. **10 种常见错误排查** - 覆盖所有常见问题
+5. **完整使用流程示例** - 6 步完整示例，格式完全正确
+
+#### 关键修正点：
+
+| 字段类型 | 原格式（错误） | 新格式（正确） |
+|----------|---------------|---------------|
+| 单选/多选（新增） | `[{"id": "opt1", "text": "选项", "style": 1}]` | `[{"text": "选项", "style": 1}]` |
+| 单选/多选（已有） | `[{"text": "选项"}]` | `[{"id": "选项 ID"}]` |
+| 日期 | `[1704067200000]` 或 `["2024-01-01"]` | `"1704067200000"` |
+| 文本 | `{"type": "text", "text": "内容"}` | `[{"type": "text", "text": "内容"}]` |
+
+---
+
+### 2026-03-19 v2 - 智能表格记录格式修正
+
+#### 修复的问题：
+
+1. **数字/日期类型值格式错误** ❌ → ✅
+   - **问题**：文档示例中数字和日期类型使用了数组格式
+   - **原因**：实际 API 测试表明数字和日期类型应该直接写值
+   - **修正**：明确字段值格式因类型而异
+     - 数字/货币/进度/百分数：直接写值 `25`、`15000.50`、`0.75`
+     - 日期：直接写毫秒时间戳字符串 `"1704067200000"`
+     - 文本/成员/选项/复选框等：使用数组 `[{"type": "text", "text": "内容"}]`、`[{"user_id": "xxx"}]`
+   - **插件自动规范化**：如果传入格式不正确，插件会自动转换
+
+---
+
+### 2026-03-18 v1 - 初始重大修正
 
 #### 修复的问题：
 
 1. **添加记录数据格式错误** ❌ → ✅
    - **问题**：数据格式不正确，导致所有数据填充到一列
-   - **原因**：values 的值应该是数组，但可能使用了直接值
-   - **修正**：明确所有字段值都必须是数组格式
+   - **原因**：没有明确说明不同字段类型的值格式差异
+   - **修正**：明确字段值格式因类型而异
      - 文本：`[{"type": "text", "text": "内容"}]`
-     - 数字：`[25]`
-     - 日期：`["1704067200000"]`（毫秒时间戳）
+     - 数字：`25`（直接值，不是数组）
+     - 日期：`"1704067200000"`（毫秒时间戳字符串，不是数组）
      - 选项：`[{"id": "opt1", "text": "选项", "style": 1}]`
 
 2. **缺少字段类型与值类型对照表** ❌ → ✅
