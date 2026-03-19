@@ -1189,11 +1189,12 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
               });
             }
             case "smartsheet_add_records": {
-              const result = await docClient.smartTableOperate({
+              const result = await docClient.smartTableAddRecords({
                 agent: account,
                 docId: params.docId,
-                operation: "add_records",
-                bodyData: params,
+                sheetId: params.sheetId,
+                records: params.records,
+                key_type: params.key_type,
               });
               return buildToolResult({
                 ok: true,
@@ -1205,11 +1206,11 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
               });
             }
             case "smartsheet_update_records": {
-              const result = await docClient.smartTableOperate({
+              const result = await docClient.smartTableUpdateRecords({
                 agent: account,
                 docId: params.docId,
-                operation: "update_records",
-                bodyData: params,
+                sheetId: params.sheetId,
+                records: params.records,
               });
               return buildToolResult({
                 ok: true,
@@ -1350,7 +1351,13 @@ export function registerWecomDocTools(api: OpenClawPluginApi) {
               });
             }
             case "smartsheet_add_fields": {
-              const result = await docClient.smartTableAddFields({ agent: account, ...params });
+              const result = await docClient.smartTableAddFields({ 
+                agent: account, 
+                docId: params.docId, 
+                sheetId: params.sheetId, 
+                fields: params.fields,
+                autoCleanupDefaultField: params.autoCleanupDefaultField !== false, // Default true
+              });
               return buildToolResult({
                 ok: true,
                 action,

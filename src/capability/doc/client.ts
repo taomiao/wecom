@@ -196,25 +196,112 @@ export class WecomDocClient {
         const normalizedFatherId = readString(fatherId);
         if (normalizedSpaceId) payload.spaceid = normalizedSpaceId;
         if (normalizedFatherId) payload.fatherid = normalizedFatherId;
+        
+        // admin_users is required for smart_table to ensure proper permissions
         const normalizedAdminUsers = Array.isArray(adminUsers)
             ? adminUsers.map((item) => readString(item)).filter(Boolean)
             : [];
         if (normalizedAdminUsers.length > 0) {
             payload.admin_users = normalizedAdminUsers;
         }
+        
         const json = await this.postWecomDocApi({
             path: "/cgi-bin/wedoc/create_doc",
             actionLabel: "create_doc",
             agent,
             body: payload,
         });
-        return {
+        
+        const result = {
             raw: json,
             docId: readString(json.docid),
             url: readString(json.url),
             docType: normalizedDocType,
             docTypeLabel: mapDocTypeLabel(normalizedDocType),
         };
+        
+        // Auto-initialize smart_table: clean up default fields and records
+        if (normalizedDocType === 10) {
+            await this.initializeSmartTable({ agent, docId: result.docId });
+        }
+        
+        return result;
+    }
+
+    /**
+     * Initialize smart_table after creation:
+     * 1. Get default sheet (smartsheet type)
+     * 2. Get default fields (usually 5 fields)
+     * 3. Delete 4 default fields, keep 1 as primary key
+     * 4. Get default records (usually 5 empty records)
+     * 5. Delete all default records
+     */
+    private async initializeSmartTable(params: { agent: ResolvedAgentAccount; docId: string }) {
+        const { agent, docId } = params;
+        
+        try {
+            // Step 1: Get sheet list to find the default smartsheet
+            const sheetsResult = await this.smartTableGetSheets({ agent, docId });
+            const defaultSheet = sheetsResult.sheets.find((s: any) => s.type === "smartsheet");
+            if (!defaultSheet) return; // No smartsheet found, skip initialization
+            
+            const sheetId = (defaultSheet as any).sheet_id;
+            
+            // Step 2: Get default fields
+            const fieldsResult = await this.smartTableGetFields({ agent, docId, sheetId });
+            const fields = fieldsResult.fields || [];
+            
+            if (fields.length > 1) {
+                // Keep the last field as primary key, delete the rest
+                // Primary key capable types: TEXT, NUMBER, DATE_TIME, URL, PROGRESS, EMAIL, PHONE_NUMBER, FORMULA, LOCATION, CURRENCY, AUTONUMBER, TITLE, WWGROUP
+                const primaryKeyCapableTypes = [
+                    'FIELD_TYPE_TEXT', 'FIELD_TYPE_NUMBER', 'FIELD_TYPE_DATE_TIME',
+                    'FIELD_TYPE_URL', 'FIELD_TYPE_PROGRESS', 'FIELD_TYPE_EMAIL',
+                    'FIELD_TYPE_PHONE_NUMBER', 'FIELD_TYPE_LOCATION', 'FIELD_TYPE_CURRENCY',
+                    'FIELD_TYPE_AUTONUMBER', 'FIELD_TYPE_WWGROUP'
+                ];
+                
+                // Find a field that can be primary key (prefer the last one)
+                let fieldToDelete: string[] = [];
+                let fieldToKeep: string | null = null;
+                
+                for (let i = fields.length - 1; i >= 0; i--) {
+                    const field = fields[i] as any;
+                    if (!fieldToKeep && primaryKeyCapableTypes.includes(field.field_type)) {
+                        fieldToKeep = field.field_id;
+                    } else if (field.field_id) {
+                        fieldToDelete.push(field.field_id);
+                    }
+                }
+                
+                // If no primary key capable field found, keep the last one anyway
+                if (!fieldToKeep && fields.length > 0) {
+                    const lastField = fields[fields.length - 1] as any;
+                    fieldToKeep = lastField.field_id;
+                    fieldToDelete = fields.slice(0, -1).map((f: any) => f.field_id);
+                }
+                
+                // Delete the fields
+                if (fieldToDelete.length > 0) {
+                    await this.smartTableDelFields({ agent, docId, sheetId, field_ids: fieldToDelete });
+                }
+            }
+            
+            // Step 3: Get default records
+            const recordsResult = await this.smartTableGetRecords({ agent, docId, sheetId, limit: 100 });
+            const records = recordsResult.records || [];
+            
+            if (records.length > 0) {
+                // Delete all default empty records
+                const recordIds = records.map((r: any) => r.record_id).filter(Boolean);
+                if (recordIds.length > 0) {
+                    await this.smartTableDelRecords({ agent, docId, sheetId, record_ids: recordIds });
+                }
+            }
+        } catch (err) {
+            // Non-fatal: smart_table created, just default cleanup failed
+            console.error(`[WecomDocClient] initializeSmartTable failed:`, err);
+        }
     }
 
     async renameDoc(params: { agent: ResolvedAgentAccount; docId: string; newName: string }) {
@@ -1325,8 +1412,9 @@ export class WecomDocClient {
         docId: string; 
         sheetId: string; 
         fields: any[];
+        autoCleanupDefaultField?: boolean; // Auto-delete leftover default field after adding new fields
     }) {
-        const { agent, docId, sheetId, fields } = params;
+        const { agent, docId, sheetId, fields, autoCleanupDefaultField = true } = params;
         
         // Validate fields per official API spec
         if (!Array.isArray(fields) || fields.length === 0) {
@@ -1367,10 +1455,52 @@ export class WecomDocClient {
                 fields: fields,
             },
         });
-        return {
+        
+        const result = {
             raw: json,
             fields: readArray(json.fields),
         };
+        
+        // Auto-cleanup: delete leftover default field after successfully adding new fields
+        // This handles the case where initializeSmartTable kept 1 default field
+        if (autoCleanupDefaultField) {
+            await this.cleanupLeftoverDefaultField({ agent, docId, sheetId, newlyAddedFieldCount: result.fields.length });
+        }
+        
+        return result;
+    }
+
+    /**
+     * Cleanup leftover default field after adding new fields
+     * When user adds new fields, we can safely delete the leftover default field from initialization
+     */
+    private async cleanupLeftoverDefaultField(params: { 
+        agent: ResolvedAgentAccount; 
+        docId: string; 
+        sheetId: string;
+        newlyAddedFieldCount: number;
+    }) {
+        const { agent, docId, sheetId, newlyAddedFieldCount } = params;
+        
+        try {
+            // Get all fields to find the leftover default field
+            const fieldsResult = await this.smartTableGetFields({ agent, docId, sheetId, limit: 100 });
+            const allFields = fieldsResult.fields || [];
+            
+            // If we only have 1 field and it's likely the leftover default, delete it
+            // (User has added new fields, so we can remove the old default)
+            if (allFields.length === 1 && newlyAddedFieldCount > 0) {
+                const leftoverField = allFields[0] as any;
+                // Check if it's a default field type (TEXT, NUMBER, DATE_TIME, SINGLE_SELECT, USER)
+                const defaultFieldTypes = ['FIELD_TYPE_TEXT', 'FIELD_TYPE_NUMBER', 'FIELD_TYPE_DATE_TIME', 'FIELD_TYPE_SINGLE_SELECT', 'FIELD_TYPE_USER'];
+                if (defaultFieldTypes.includes(leftoverField.field_type)) {
+                    await this.smartTableDelFields({ agent, docId, sheetId, field_ids: [leftoverField.field_id] });
+                }
+            }
+        } catch (err) {
+            // Non-fatal: new fields added, just cleanup failed
+            console.error(`[WecomDocClient] cleanupLeftoverDefaultField failed:`, err);
+        }
     }
 
     async smartTableUpdateFields(params: { 
@@ -1515,16 +1645,47 @@ export class WecomDocClient {
             throw new Error("records 必须是非空数组");
         }
         
-        // Validate each record has values object
-        records.forEach((record: any, index: number) => {
+        // Validate and normalize each record's values format
+        // Per actual API behavior: 
+        // - TEXT, USER, SELECT, etc. need array format: [{type:"text", text:"..."}] or [{user_id:"..."}]
+        // - NUMBER, DATE_TIME, PROGRESS, etc. can be direct value: 25 or "1704067200000"
+        const normalizedRecords = records.map((record: any, recordIndex: number) => {
             if (!record.values || typeof record.values !== 'object') {
-                throw new Error(`第${index + 1}条记录缺少 values 对象`);
+                throw new Error(`第${recordIndex + 1}条记录缺少 values 对象`);
             }
+            
+            const normalizedValues: Record<string, any> = {};
+            for (const [key, value] of Object.entries(record.values)) {
+                // Normalize value to array format if it's a primitive or plain object
+                // Array values are kept as-is (for multi-select, multi-user, etc.)
+                if (!Array.isArray(value)) {
+                    // Primitive values (number, string) - wrap in array for consistency
+                    // But for NUMBER, DATE_TIME, PROGRESS, PERCENTAGE - keep as direct value
+                    if (typeof value === 'number' || (typeof value === 'string' && /^\d{13}$/.test(value))) {
+                        // Number or timestamp string - keep as direct value
+                        normalizedValues[key] = value;
+                    } else if (typeof value === 'object' && value !== null) {
+                        // Object like {user_id: "..."} - wrap in array
+                        normalizedValues[key] = [value];
+                    } else {
+                        // String text - wrap as text object in array
+                        normalizedValues[key] = [{ type: 'text', text: String(value) }];
+                    }
+                } else {
+                    // Already an array - keep as-is
+                    normalizedValues[key] = value;
+                }
+            }
+            
+            return {
+                ...record,
+                values: normalizedValues,
+            };
         });
         
         const bodyData: Record<string, unknown> = {
             sheet_id: readString(sheetId),
-            records: records,
+            records: normalizedRecords,
         };
         
         if (key_type) {
@@ -1536,7 +1697,42 @@ export class WecomDocClient {
 
     async smartTableUpdateRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; records: any[] }) {
         const { agent, docId, sheetId, records } = params;
-        return this.smartTableOperate({ agent, docId, operation: "update_records", bodyData: { sheet_id: sheetId, records } });
+        
+        // Validate and normalize records format (same as addRecords)
+        if (!Array.isArray(records) || records.length === 0) {
+            throw new Error("records 必须是非空数组");
+        }
+        
+        const normalizedRecords = records.map((record: any, recordIndex: number) => {
+            if (!record.record_id) {
+                throw new Error(`第${recordIndex + 1}条记录缺少 record_id`);
+            }
+            if (!record.values || typeof record.values !== 'object') {
+                throw new Error(`第${recordIndex + 1}条记录缺少 values 对象`);
+            }
+            
+            const normalizedValues: Record<string, any> = {};
+            for (const [key, value] of Object.entries(record.values)) {
+                if (!Array.isArray(value)) {
+                    if (typeof value === 'number' || (typeof value === 'string' && /^\d{13}$/.test(value))) {
+                        normalizedValues[key] = value;
+                    } else if (typeof value === 'object' && value !== null) {
+                        normalizedValues[key] = [value];
+                    } else {
+                        normalizedValues[key] = [{ type: 'text', text: String(value) }];
+                    }
+                } else {
+                    normalizedValues[key] = value;
+                }
+            }
+            
+            return {
+                ...record,
+                values: normalizedValues,
+            };
+        });
+        
+        return this.smartTableOperate({ agent, docId, operation: "update_records", bodyData: { sheet_id: sheetId, records: normalizedRecords } });
     }
 
     async smartTableDelRecords(params: { agent: ResolvedAgentAccount; docId: string; sheetId: string; record_ids: string[] }) {
